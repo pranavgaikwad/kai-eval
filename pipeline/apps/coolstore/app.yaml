@@ -1,7 +1,9 @@
 ---
 name: coolstore
 source_code:
-  local_path: ./coolstore
+  git:
+    url: https://github.com/konveyor-ecosystem/coolstore
+    branch: main
 targets:
   - quarkus
   - jakarta-ee

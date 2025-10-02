@@ -1,0 +1,10 @@
+---
+name: spring-framework
+source_code:
+  git:
+    url: https://github.com/rromannissen/spring-framework-petclinic/
+    branch: legacy
+targets:
+  - spring
+  - cloud-readiness
+

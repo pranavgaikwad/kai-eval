@@ -1,6 +1,6 @@
 ---
-description: Generate detailed notes to fix a given migration issue(s)
-argument-hint: [target] [issue(s) description]
+description: "Generate detailed notes to fix a given migration issue(s)"
+argument-hint: "[target] [issue(s) description]"
 ---
 
 You are an expert migration engineer. You are overseeing a migration of an application to #$1.
