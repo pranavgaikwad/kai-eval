@@ -5,6 +5,6 @@ source_code:
     url: https://github.com/rromannissen/spring-framework-petclinic/
     branch: legacy
 targets:
-  - spring
+  - spring6
   - cloud-readiness
 
