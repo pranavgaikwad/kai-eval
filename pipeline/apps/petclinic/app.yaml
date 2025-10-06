@@ -2,7 +2,7 @@
 name: spring-framework
 source_code:
   git:
-    url: https://github.com/rromannissen/spring-framework-petclinic/
+    url: https://github.com/pranavgaikwad/spring-framework-petclinic/
     branch: legacy
 targets:
   - spring6
