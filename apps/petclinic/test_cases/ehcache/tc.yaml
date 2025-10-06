@@ -1,5 +1,4 @@
 ---
-application: petclinic
 description: |
   Spring Framework 6.0 has dropped support for EhCache 2.x
   The org.springframework.cache.ehcache package has been removed as it was providing support for
@@ -50,6 +49,5 @@ description: |
   - src/main/java/org/springframework/samples/petclinic/config/ToolsConfig.java
 rules:
   - spring-framework-5.x-to-6.0-removed-apis-00001
-tools:
-  - mvn
-  - analysis
+tests:
+  - CacheBehaviorTests

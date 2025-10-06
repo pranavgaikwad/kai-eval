@@ -1,5 +1,6 @@
 ---
 name: spring-framework
+language: java
 source_code:
   git:
     url: https://github.com/pranavgaikwad/spring-framework-petclinic/
