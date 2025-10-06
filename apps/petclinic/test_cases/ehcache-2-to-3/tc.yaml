@@ -49,5 +49,5 @@ description: |
   - src/main/java/org/springframework/samples/petclinic/config/ToolsConfig.java
 rules:
   - spring-framework-5.x-to-6.0-removed-apis-00001
-tests:
+testSelectors:
   - CacheBehaviorTests

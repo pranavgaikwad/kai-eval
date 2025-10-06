@@ -3,8 +3,8 @@ name: coolstore
 language: java
 source_code:
   git:
-    url: https://github.com/konveyor-ecosystem/coolstore
-    branch: main
+    url: https://github.com/pranavgaikwad/coolstore
+    branch: exp/testCases
 targets:
   - quarkus
   - jakarta-ee

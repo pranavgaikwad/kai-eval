@@ -1,5 +1,6 @@
 ---
 name: springframework-demo
+language: java
 source_code:
   git:
     url: https://github.com/pranavgaikwad/migtools-getting-started
