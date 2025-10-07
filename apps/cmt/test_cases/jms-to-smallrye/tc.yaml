@@ -1,0 +1,14 @@
+---
+description: |
+  JMS is not supported in Quarkus
+  References to JavaEE/JakartaEE JMS elements should be removed and replaced with their Quarkus SmallRye/Microprofile equivalents.
+  
+  These issues were found in files:
+  - src/main/java/org/jboss/as/quickstarts/cmt/ejb/CustomerManagerEJB.java
+  - src/main/java/org/jboss/as/quickstarts/cmt/ejb/InvoiceManagerEJB.java
+  - src/main/java/org/jboss/as/quickstarts/cmt/ejb/LogMessageManagerEJB.java
+  - src/main/java/org/jboss/as/quickstarts/cmt/mdb/HelloWorldMDB.java
+rules:
+  - jms-to-reactive-quarkus-00050
+testSelectors:
+  - JMSComponentIntegrationTest
