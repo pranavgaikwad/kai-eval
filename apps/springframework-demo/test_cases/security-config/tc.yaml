@@ -1,0 +1,48 @@
+---
+description: |
+  WebSecurityConfigurerAdapter has been removed in Spring Security 6.0
+  `WebSecurityConfigurerAdapter` has been removed in Spring Security 6.0. Now, to configure security,
+  instead of extending `WebSecurityConfigurerAdapter`, define a `SecurityFilterChain` bean in a `@Configuration`
+  class:
+
+  Before:
+  ```java
+  @Configuration
+  @EnableWebSecurity
+  public class SecurityConfig extends WebSecurityConfigurerAdapter {
+      @Override
+      protected void configure(HttpSecurity http) throws Exception {
+          http
+              .authorizeRequests()
+                  .antMatchers("/public").permitAll()
+                  .anyRequest().authenticated()
+              .and()
+              .formLogin();
+      }
+  }
+  ```
+
+  After:
+  ```java
+  @Configuration
+  @EnableWebSecurity
+  public class SecurityConfig {
+      @Bean
+      public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+          http
+          .authorizeHttpRequests(auth -> auth
+              .requestMatchers("/public").permitAll()
+              .anyRequest().authenticated()
+          )
+          .formLogin(withDefaults());
+          return http.build();
+      }
+  }
+  ```
+  
+  These issues were found in files:
+  - src/main/java/com/redhat/mta/examples/spring/framework/security/SecurityConfig.java
+rules:
+- spring-framework-5.x-to-6.0-security-00001
+testSelectors:
+- SecurityConfigE2ETest
