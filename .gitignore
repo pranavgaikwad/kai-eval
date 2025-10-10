@@ -1,0 +1,6 @@
+.venv/
+.vscode/
+.trunk/
+.env
+./notebooks/test-data/
+!./notebooks/test-data/diffs/
