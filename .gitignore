@@ -2,5 +2,5 @@
 .vscode/
 .trunk/
 .env
-./notebooks/test-data/
-!./notebooks/test-data/diffs/
+/notebooks/test-data/*
+!/notebooks/test-data/diffs/

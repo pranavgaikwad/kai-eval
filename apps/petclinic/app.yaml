@@ -1,5 +1,5 @@
 ---
-name: spring-framework
+name: petclinic
 language: java
 source_code:
   git:
