@@ -1,4 +1,5 @@
 ---
+name: jms-to-smallrye
 description: |
   JMS is not supported in Quarkus
   References to JavaEE/JakartaEE JMS elements should be removed and replaced with their Quarkus SmallRye/Microprofile equivalents.

@@ -1,4 +1,5 @@
 ---
+name: remote-ejb-to-rest
 description: |
   Remote EJBs are not supported in Quarkus
   Remote EJBs are not supported in Quarkus, and therefore its use must be removed and replaced with REST functionality. In order to do this:

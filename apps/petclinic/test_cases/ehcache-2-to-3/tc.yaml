@@ -1,4 +1,5 @@
 ---
+name: ehcache-2-to-3
 description: |
   Spring Framework 6.0 has dropped support for EhCache 2.x
   The org.springframework.cache.ehcache package has been removed as it was providing support for

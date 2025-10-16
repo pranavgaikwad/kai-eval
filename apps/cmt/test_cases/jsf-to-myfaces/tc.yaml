@@ -1,4 +1,5 @@
 ---
+name: jsf-to-myfaces
 description: |
   Replace JSF Dependency with MyFaces
   JSF Dependencies with groupId `org.jboss.spec.javax.faces` should be replaced with 

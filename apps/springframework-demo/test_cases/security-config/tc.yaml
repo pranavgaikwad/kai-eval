@@ -1,4 +1,5 @@
 ---
+name: security-config
 description: |
   WebSecurityConfigurerAdapter has been removed in Spring Security 6.0
   `WebSecurityConfigurerAdapter` has been removed in Spring Security 6.0. Now, to configure security,
