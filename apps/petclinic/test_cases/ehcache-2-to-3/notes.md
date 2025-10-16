@@ -1,32 +1,11 @@
 # EhCache 2.x to 3.x Migration for Spring Framework 6 Compatibility
 
 ## Summary
-**Issue ID**: Spring Framework 6 EhCache Migration
+
 **Target Technology**: Spring Framework 6.0
 **Change Contract**: Replace EhCache 2.x dependencies and Spring's `org.springframework.cache.ehcache` package with EhCache 3.x and JCache (JSR-107) integration. Remove obsolete Spring EhCache support classes and migrate to JCache-compatible configuration.
 
 The Spring Framework 6.0 has removed the `org.springframework.cache.ehcache` package that provided support for EhCache 2.x, which uses deprecated Java EE APIs. EhCache 3.x with JCache (JSR-107) support is the required replacement.
-
-## Affected Surface Area
-
-### Components/Modules Touched
-- **Caching Configuration**: ToolsConfig.java (Spring configuration for cache management)
-- **Maven Dependencies**: pom.xml (EhCache and Hibernate EhCache dependencies)
-- **Cache Configuration**: ehcache.xml (EhCache 2.x XML configuration)
-- **Service Layer**: ClinicServiceImpl.java (uses @Cacheable annotation - no changes needed)
-
-### Direct vs. Indirect Occurrences
-**Direct Occurrences**:
-- ToolsConfig.java:35-36 - Spring EhCache imports
-- ToolsConfig.java:47 - net.sf.ehcache import
-- ToolsConfig.java:69-73 - EhCacheCacheManager bean
-- ToolsConfig.java:75-80 - EhCacheManagerFactoryBean bean
-- pom.xml:247-249 - hibernate-ehcache dependency
-- ehcache.xml:1-18 - EhCache 2.x configuration
-
-**Indirect Occurrences**:
-- pom.xml:179-184 - spring-context-support dependency (used for EhCacheCacheManager)
-- ClinicServiceImpl.java:102 - @Cacheable annotation (compatible with new setup)
 
 ## Per-File Change Plan
 
@@ -203,9 +182,3 @@ Add properties section for new dependency versions:
 <jcache-api.version>1.1.1</jcache-api.version>
 <ehcache.version>3.10.8</ehcache.version>
 ```
-
-### Runtime Considerations
-- **Classpath**: EhCache 3.x with jakarta classifier ensures compatibility with Spring Framework 6's Jakarta EE requirements
-- **Configuration Loading**: JCache CacheManager will automatically discover ehcache.xml in classpath
-- **Cache Names**: The "vets" cache name remains the same, ensuring @Cacheable annotations continue to work
-- **Memory Configuration**: EhCache 3.x resource management is different but functionally equivalent

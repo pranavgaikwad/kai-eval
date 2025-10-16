@@ -1,0 +1,349 @@
+diff --git a/pom.xml b/pom.xml
+index c32f4a5..de1c2cd 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -16,7 +16,7 @@
+ 	<properties>
+ 
+ 		<!-- Generic properties -->
+-		<java.version>1.8</java.version>
++		<java.version>21</java.version>
+ 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+ 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+ 		<maven.compiler.source>${java.version}</maven.compiler.source>
+@@ -217,6 +217,20 @@
+ 			<artifactId>hazelcast</artifactId>
+ 			<version>${hazelcast.version}</version>
+ 		</dependency>
++
++    <!-- JCache API -->
++		<dependency>
++			<groupId>javax.cache</groupId>
++			<artifactId>cache-api</artifactId>
++			<version>1.1.1</version>
++		</dependency>
++
++<!-- Example JCache implementation (e.g., EHCache) -->
++    <dependency>
++        <groupId>org.ehcache</groupId>
++        <artifactId>ehcache</artifactId>
++        <version>3.10.0</version> <!-- Choose the latest stable version -->
++    </dependency>
+ 		
+ 		<!-- Logging with SLF4J & LogBack -->
+ 		<dependency>
+@@ -356,6 +370,10 @@
+ 				<groupId>org.apache.maven.plugins</groupId>
+ 				<artifactId>maven-compiler-plugin</artifactId>
+ 				<version>${maven-compiler-plugin.version}</version>
++                <configuration>
++                    <source>${java.version}</source>
++                    <target>${java.version}</target>
++                </configuration>
+ 			</plugin>
+ 
+ 			<plugin>
+@@ -599,4 +617,4 @@
+ 		</repository>
+ 	</repositories>
+ 
+-</project>
++</project>
+\ No newline at end of file
+diff --git a/src/main/java/org/springframework/samples/petclinic/config/BusinessConfig.java b/src/main/java/org/springframework/samples/petclinic/config/BusinessConfig.java
+index 646d477..25bb639 100644
+--- a/src/main/java/org/springframework/samples/petclinic/config/BusinessConfig.java
++++ b/src/main/java/org/springframework/samples/petclinic/config/BusinessConfig.java
+@@ -1,52 +1,51 @@
+-/*
+- * Copyright 2002-2013 the original author or authors.
+- *
+- * Licensed under the Apache License, Version 2.0 (the "License");
+- * you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *      http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-/*
+- * Copyright 2002-2013 the original author or authors.
+- *
+- * Licensed under the Apache License, Version 2.0 (the "License");
+- * you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *      http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.springframework.samples.petclinic.config;
+-
+-import org.springframework.context.annotation.ComponentScan;
+-import org.springframework.context.annotation.Configuration;
+-import org.springframework.context.annotation.Import;
+-import org.springframework.context.annotation.ImportResource;
+-import org.springframework.context.annotation.PropertySource;
+-import org.springframework.transaction.annotation.EnableTransactionManagement;
+-
+-@Configuration
+-@ComponentScan("org.springframework.samples.petclinic.service")
+-// Configurer that replaces ${...} placeholders with values from a properties
+-// file
+-// (in this case, JDBC-related settings for the JPA EntityManager definition
+-// below)
+-@PropertySource("classpath:spring/data-access.properties")
+-@EnableTransactionManagement
+-@Import({ DataSourceConfig.class, InitDataSourceConfig.class, JdbcConfig.class, SharedJpaConfig.class, JpaConfig.class,
+-        SpringDataJpaConfig.class })
+-public class BusinessConfig {
+-
+-}
++/*
++ * Copyright 2002-2013 the original author or authors.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++/*
++ * Copyright 2002-2013 the original author or authors.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.springframework.samples.petclinic.config;
++
++import org.springframework.context.annotation.ComponentScan;
++import org.springframework.context.annotation.Configuration;
++import org.springframework.context.annotation.Import;
++import org.springframework.context.annotation.PropertySource;
++import org.springframework.transaction.annotation.EnableTransactionManagement;
++
++@Configuration
++@ComponentScan("org.springframework.samples.petclinic.service")
++// Configurer that replaces ${...} placeholders with values from a properties
++// file
++// (in this case, JDBC-related settings for the JPA EntityManager definition
++// below)
++@PropertySource("classpath:spring/data-access.properties")
++@EnableTransactionManagement
++@Import({ DataSourceConfig.class, InitDataSourceConfig.class, JdbcConfig.class, SharedJpaConfig.class, JpaConfig.class,
++        SpringDataJpaConfig.class })
++public class BusinessConfig {
++
++}
+diff --git a/src/main/java/org/springframework/samples/petclinic/config/ToolsConfig.java b/src/main/java/org/springframework/samples/petclinic/config/ToolsConfig.java
+index 642649e..bda6b66 100644
+--- a/src/main/java/org/springframework/samples/petclinic/config/ToolsConfig.java
++++ b/src/main/java/org/springframework/samples/petclinic/config/ToolsConfig.java
+@@ -1,81 +1,59 @@
+-/*
+- * Copyright 2002-2013 the original author or authors.
+- *
+- * Licensed under the Apache License, Version 2.0 (the "License");
+- * you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *      http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-/*
+- * Copyright 2002-2013 the original author or authors.
+- *
+- * Licensed under the Apache License, Version 2.0 (the "License");
+- * you may not use this file except in compliance with the License.
+- * You may obtain a copy of the License at
+- *
+- *      http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-package org.springframework.samples.petclinic.config;
+-
+-import org.springframework.beans.factory.annotation.Autowired;
+-import org.springframework.cache.annotation.EnableCaching;
+-import org.springframework.cache.ehcache.EhCacheCacheManager;
+-import org.springframework.cache.ehcache.EhCacheManagerFactoryBean;
+-import org.springframework.context.annotation.Bean;
+-import org.springframework.context.annotation.Configuration;
+-import org.springframework.context.annotation.Description;
+-import org.springframework.context.annotation.EnableAspectJAutoProxy;
+-import org.springframework.context.annotation.EnableMBeanExport;
+-import org.springframework.core.convert.ConversionService;
+-import org.springframework.core.convert.support.DefaultConversionService;
+-import org.springframework.core.io.ClassPathResource;
+-import org.springframework.samples.petclinic.util.CallMonitoringAspect;
+-
+-import net.sf.ehcache.CacheManager;
+-
+-@Configuration
+-@EnableCaching // enables scanning for @Cacheable annotation
+-@EnableMBeanExport
+-@EnableAspectJAutoProxy
+-public class ToolsConfig {
+-
+-	@Bean
+-	@Description("Conversion Service for list handling on configuration loading")
+-	public ConversionService conversionService() {
+-		return new DefaultConversionService();
+-	}
+-
+-	@Bean
+-	@Description("Call monitoring aspect that monitors call count and call invocation time")
+-	public CallMonitoringAspect callMonitor() {
+-		return new CallMonitoringAspect();
+-	}
+-
+-	@Bean
+-	@Autowired
+-	public EhCacheCacheManager ehCacheCacheManager(CacheManager cacheManager) {
+-		EhCacheCacheManager ehCacheCacheManager = new EhCacheCacheManager();
+-		ehCacheCacheManager.setCacheManager(cacheManager);
+-		return ehCacheCacheManager;
+-	}
+-
+-	@Bean
+-	public EhCacheManagerFactoryBean cacheManager() {
+-		EhCacheManagerFactoryBean ehCacheManager = new EhCacheManagerFactoryBean();
+-		ehCacheManager.setConfigLocation(new ClassPathResource("cache/ehcache.xml"));
+-		return ehCacheManager;
+-	}
+-}
++/*
++ * Copyright 2002-2013 the original author or authors.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++package org.springframework.samples.petclinic.config;
++
++import javax.cache.Caching;
++import javax.cache.spi.CachingProvider;
++
++import org.springframework.beans.factory.annotation.Autowired;
++import org.springframework.cache.annotation.EnableCaching;
++import org.springframework.cache.jcache.JCacheCacheManager;
++import org.springframework.context.annotation.Bean;
++import org.springframework.context.annotation.Configuration;
++import org.springframework.context.annotation.Description;
++import org.springframework.context.annotation.EnableAspectJAutoProxy;
++import org.springframework.context.annotation.EnableMBeanExport;
++import org.springframework.core.convert.ConversionService;
++import org.springframework.core.convert.support.DefaultConversionService;
++import org.springframework.samples.petclinic.util.CallMonitoringAspect;
++
++@Configuration
++@EnableCaching // enables scanning for @Cacheable annotation
++@EnableMBeanExport
++@EnableAspectJAutoProxy
++public class ToolsConfig {
++
++	@Bean
++	@Description("Conversion Service for list handling on configuration loading")
++	public ConversionService conversionService() {
++		return new DefaultConversionService();
++	}
++
++	@Bean
++	@Description("Call monitoring aspect that monitors call count and call invocation time")
++	public CallMonitoringAspect callMonitor() {
++		return new CallMonitoringAspect();
++	}
++
++	@Bean
++	@Autowired
++	public JCacheCacheManager cacheManager() {
++		CachingProvider cachingProvider = Caching.getCachingProvider();
++		javax.cache.CacheManager ehCacheManager = cachingProvider.getCacheManager();
++		return new JCacheCacheManager(ehCacheManager);
++	}
++}
+\ No newline at end of file
+diff --git a/src/test/java/org/springframework/samples/petclinic/service/ClinicServiceJdbcTests.java b/src/test/java/org/springframework/samples/petclinic/service/ClinicServiceJdbcTests.java
+index f6b018c..8f394cd 100644
+--- a/src/test/java/org/springframework/samples/petclinic/service/ClinicServiceJdbcTests.java
++++ b/src/test/java/org/springframework/samples/petclinic/service/ClinicServiceJdbcTests.java
+@@ -17,15 +17,13 @@ package org.springframework.samples.petclinic.service;
+ 
+ import org.springframework.samples.petclinic.config.BusinessConfig;
+ import org.springframework.test.context.ActiveProfiles;
+-import org.springframework.test.context.ContextConfiguration;
+ import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
+-import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+ 
+ /**
+  * <p> Integration test using the jdbc profile.
+  *
+- * @author Thomas Risberg
+- * @author Michael Isvy
++ * author Thomas Risberg
++ * author Michael Isvy
+  * @see AbstractClinicServiceTests AbstractClinicServiceTests for more details. </p>
+  */
+ 
+diff --git a/src/test/java/org/springframework/samples/petclinic/web/CrashControllerTests.java b/src/test/java/org/springframework/samples/petclinic/web/CrashControllerTests.java
+index a251467..2882462 100644
+--- a/src/test/java/org/springframework/samples/petclinic/web/CrashControllerTests.java
++++ b/src/test/java/org/springframework/samples/petclinic/web/CrashControllerTests.java
+@@ -9,7 +9,6 @@ import org.springframework.test.context.junit.jupiter.web.SpringJUnitWebConfig;
+ import org.springframework.test.web.servlet.MockMvc;
+ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+ import org.springframework.web.servlet.HandlerExceptionResolver;
+-import org.springframework.web.servlet.handler.SimpleMappingExceptionResolver;
+ 
+ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+@@ -17,7 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
+ /**
+  * Test class for {@link CrashController}
+  *
+- * @author Colin But
++ * author Colin But
+  */
+ @SpringJUnitWebConfig({ MvcCoreConfig.class, MvcTestConfig.class })
+ public class CrashControllerTests {

@@ -33,12 +33,17 @@ langchain-aws==0.2.35
 langchain-core==0.3.79
 langchain-openai==0.3.35
 langchain-text-splitters==0.3.11
+langgraph==0.6.10
+langgraph-checkpoint==2.1.2
+langgraph-prebuilt==0.6.4
+langgraph-sdk==0.2.9
 langsmith==0.4.34
 matplotlib-inline==0.1.7
 nest-asyncio==1.6.0
 numpy==2.3.3
 openai==2.3.0
 orjson==3.11.3
+ormsgpack==1.11.0
 packaging==25.0
 parso==0.8.5
 pexpect==4.9.0
@@ -72,4 +77,5 @@ typing-inspection==0.4.2
 typing_extensions==4.15.0
 urllib3==2.5.0
 wcwidth==0.2.14
+xxhash==3.6.0
 zstandard==0.25.0
