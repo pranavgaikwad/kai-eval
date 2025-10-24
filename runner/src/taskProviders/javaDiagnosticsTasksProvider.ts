@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import * as os from "os";
 import * as path from "path";
+
 import { Logger } from "winston";
 
 import { TaskProvider, Task, BaseInitParams } from "./types";
@@ -39,8 +40,9 @@ export class JavaDiagnosticsTasksProvider
     this.connectionManager = new LSPConnectionManager(logger);
     this.diagnosticsManager = new DiagnosticsManager(logger);
     this.processManager = new ProcessManager(logger);
+    this.logger = logger.child({ module: 'JavaDiagnosticsTasksProvider' });
 
-    this.debouncer = new EventDebouncer(logger, {
+    this.debouncer = new EventDebouncer(this.logger, {
         debounceMs: 1000,
         processor: this.getLatestDiagnostics.bind(this),
         filter: this.filterJavaFiles.bind(this),
@@ -261,6 +263,18 @@ export class JavaDiagnosticsTasksProvider
       capabilities: {
         workspace: {
           workspaceFolders: true,
+          didChangeWatchedFiles: {
+            dynamicRegistration: true,
+          },
+        },
+        textDocument: {
+          publishDiagnostics: {
+            relatedInformation: true,
+            versionSupport: false,
+            tagSupport: {
+              valueSet: [1, 2],
+            },
+          },
         },
       },
       extendedClientCapabilities: {
@@ -287,19 +301,45 @@ export class JavaDiagnosticsTasksProvider
   }
 
   private async getLatestDiagnostics(events: FileChangeEvent[]): Promise<void> {
-    this.logger.info("JavaDiagnosticsProvider processing file changes", {
+    this.logger.info("Processing file changes", {
       changeCount: events.length
     });
 
     events.forEach((event) => {
-      this.logger.debug("File change event", {
+      this.logger.debug("Processing file change event", {
         type: event.type,
         path: event.path,
         timestamp: event.timestamp.toISOString()
       });
     });
 
-    this.logger.info("JavaDiagnosticsProvider file changes processed, awaiting diagnostic updates");
+    try {
+      await this.notifyFileChanges(events);
+
+      // Wait for JDTLS to process the changes and send updated diagnostics
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      this.logger.info("File changes processed and Java diagnostics refreshed");
+    } catch (error) {
+      this.logger.warn("Failed to refresh Java diagnostics", { error });
+    }
+  }
+
+  private async notifyFileChanges(events: FileChangeEvent[]): Promise<void> {
+    for (const event of events) {
+      try {
+        if (event.type === 'modified') {
+          const fileContent = await fs.readFile(event.path, 'utf-8');
+
+          await this.connectionManager.notifyFileChange(event.path, fileContent);
+        }
+      } catch (error) {
+        this.logger.warn("Failed to notify file change", {
+          path: event.path,
+          error
+        });
+      }
+    }
   }
 
   private filterJavaFiles(events: FileChangeEvent[]): FileChangeEvent[] {

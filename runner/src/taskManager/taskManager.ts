@@ -1,6 +1,7 @@
+import { Logger } from "winston";
+
 import { TaskSnapshot, TaskSnapshotDiff } from "./types";
 import { TaskProvider, Task } from "../taskProviders/types";
-import { Logger } from "winston";
 
 export class TaskManager {
   private providers: TaskProvider[] = [];

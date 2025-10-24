@@ -10,6 +10,18 @@ export interface InitializeParams {
 export interface ClientCapabilities {
   workspace?: {
     workspaceFolders?: boolean;
+    didChangeWatchedFiles?: {
+      dynamicRegistration?: boolean;
+    };
+  };
+  textDocument?: {
+    publishDiagnostics?: {
+      relatedInformation?: boolean;
+      versionSupport?: boolean;
+      tagSupport?: {
+        valueSet: number[];
+      };
+    };
   };
 }
 
@@ -90,6 +102,43 @@ export const PublishDiagnosticsNotification =
   new NotificationType<PublishDiagnosticsParams>(
     "textDocument/publishDiagnostics",
   );
+
+export interface TextDocumentIdentifier {
+  uri: string;
+}
+
+export interface DidChangeTextDocumentParams {
+  textDocument: VersionedTextDocumentIdentifier;
+  contentChanges: TextDocumentContentChangeEvent[];
+}
+
+export interface VersionedTextDocumentIdentifier extends TextDocumentIdentifier {
+  version: number;
+}
+
+export interface TextDocumentContentChangeEvent {
+  text: string;
+}
+
+export const DidChangeTextDocumentNotification = new NotificationType<DidChangeTextDocumentParams>(
+  "textDocument/didChange",
+);
+
+export interface DidOpenTextDocumentParams {
+  textDocument: TextDocumentItem;
+}
+
+export interface TextDocumentItem {
+  uri: string;
+  languageId: string;
+  version: number;
+  text: string;
+}
+
+export const DidOpenTextDocumentNotification = new NotificationType<DidOpenTextDocumentParams>(
+  "textDocument/didOpen",
+);
+
 
 // Utility functions for LSP operations
 export function mapDiagnosticSeverity(severity?: DiagnosticSeverity): string {

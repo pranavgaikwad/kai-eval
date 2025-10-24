@@ -18,7 +18,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "ci": "npx jest",
-    "test": "./scripts/test.sh",
+    "test": "jest",
     "lint": "eslint src",
     "lint:fix": "eslint --fix src",
     "format": "eslint --fix .",

@@ -1,6 +1,7 @@
+import { Logger } from "winston";
+
 import { Diagnostic, PublishDiagnosticsParams } from "./lsp";
 import { Task } from "../types";
-import { Logger } from "winston";
 
 export class DiagnosticTask implements Task {
   constructor(private readonly diagnostic: Diagnostic) {}

@@ -1,7 +1,8 @@
 import { promises as fs } from "fs";
 import * as path from "path";
-import { Logger } from "winston";
+
 import { globby } from "globby";
+import { Logger } from "winston";
 
 /**
  * Reads .gitignore and .konveyorignore files from multiple workspace paths
