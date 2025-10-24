@@ -80,6 +80,10 @@ export class TaskManager {
     return { resolved, added, unresolved };
   }
 
+  public getLatestSnapshotId(): number {
+    return this.snapshotCounter;
+  }
+
   private generateSnapshotId(): number {
     return ++this.snapshotCounter;
   }

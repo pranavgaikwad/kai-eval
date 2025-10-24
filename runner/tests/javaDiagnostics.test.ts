@@ -1,32 +1,33 @@
 import { JavaDiagnosticsTasksProvider, JavaDiagnosticsInitParams } from '../src/taskProviders/javaDiagnosticsTasksProvider';
 import path from 'path';
 import { Logger } from 'winston';
-import { loadTestEnvironment, validateJavaTestEnvironment } from './utils';
 import { createOrderedLogger } from '../src/utils/logger';
+import { getConfig } from '../src/utils/config';
 
 describe('JavaDiagnosticsTasksProvider Tests', () => {
   let provider: JavaDiagnosticsTasksProvider;
   let logger: Logger;
 
-  beforeAll(async () => {
-    await loadTestEnvironment();
-    validateJavaTestEnvironment();
-  });
 
   beforeEach(async () => {
-    logger = createOrderedLogger(process.env.LOG_LEVEL || 'error');
+    // Load configuration from files
+    const { config, env } = await getConfig({
+      workingDir: path.resolve(__dirname, '..'),
+    });
+
+    logger = createOrderedLogger(config.logLevel || env.LOG_LEVEL || 'error');
     provider = new JavaDiagnosticsTasksProvider(logger);
 
-    const jdtBinaryPath = process.env.JDTLS_BINARY_PATH || "";
+    const jdtBinaryPath = config.jdtlsBinaryPath || env.JDTLS_BINARY_PATH || "";
     const testJavaProjectPath = path.resolve(__dirname, 'test-data/java');
     const workspacePaths = [testJavaProjectPath];
-    const bundles = process.env.JDTLS_BUNDLES?.split(',') || [];
-    const jvmMaxMem = process.env.JVM_MAX_MEM;
+    const bundles = config.jdtlsBundles || env.JDTLS_BUNDLES?.split(',') || [];
+    const jvmMaxMem = config.jvmMaxMem || env.JVM_MAX_MEM;
 
     const initParams: JavaDiagnosticsInitParams = {
-      jdtBinaryPath,
+      jdtlsBinaryPath: jdtBinaryPath,
       workspacePaths,
-      bundles,
+      jdtlsBundles: bundles,
       jvmMaxMem,
     };
 
@@ -60,7 +61,8 @@ describe('JavaDiagnosticsTasksProvider Tests', () => {
 
     const intentionalErrors = diagnosticsForMainJava.filter(task => {
       const taskJson = task.toJSON();
-      return taskJson.description.includes('com.intentional cannot be resolved to a type') &&
+      return taskJson.description && typeof taskJson.description === 'string' &&
+             taskJson.description.includes('com.intentional cannot be resolved to a type') &&
              taskJson.line === 7 &&
              taskJson.type === 'error';
     });
@@ -95,6 +97,7 @@ describe('JavaDiagnosticsTasksProvider Tests', () => {
     const initialErrors = initialTasks.filter(task => {
       const taskJson = task.toJSON();
       return taskJson.file === mainJavaFilePath &&
+             taskJson.description && typeof taskJson.description === 'string' &&
              taskJson.description.includes('com.intentional cannot be resolved to a type') &&
              taskJson.line === 7;
     });
@@ -132,6 +135,7 @@ describe('JavaDiagnosticsTasksProvider Tests', () => {
       const remainingErrors = updatedTasks.filter(task => {
         const taskJson = task.toJSON();
         return taskJson.file === mainJavaFilePath &&
+               taskJson.description && typeof taskJson.description === 'string' &&
                taskJson.description.includes('com.intentional cannot be resolved to a type') &&
                taskJson.line === 7;
       });
@@ -145,6 +149,7 @@ describe('JavaDiagnosticsTasksProvider Tests', () => {
       const remainingErrorsAgain = updatedTasksAgain.filter(task => {
         const taskJson = task.toJSON();
         return taskJson.file === mainJavaFilePath &&
+               taskJson.description && typeof taskJson.description === 'string' &&
                taskJson.description.includes('com.intentional cannot be resolved to a type') &&
                taskJson.line === 7;
       });

@@ -42,6 +42,7 @@ export async function getExcludedPaths(logger: Logger, workspacePaths: string[])
   return uniqueExcludedPaths;
 }
 
+
 /**
  * Reads and parses ignore patterns from .gitignore and .konveyorignore files
  * in a single workspace directory.

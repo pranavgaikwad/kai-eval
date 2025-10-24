@@ -3,8 +3,8 @@ import { RequestType, NotificationType } from "vscode-jsonrpc/node";
 export interface InitializeParams {
   rootUri: string;
   capabilities: ClientCapabilities;
-  extendedClientCapabilities?: Record<string, any>;
-  initializationOptions?: Record<string, any>;
+  extendedClientCapabilities?: Record<string, unknown>;
+  initializationOptions?: Record<string, unknown>;
 }
 
 export interface ClientCapabilities {
@@ -29,8 +29,10 @@ export interface InitializeResult {
   capabilities: ServerCapabilities;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface ServerCapabilities {}
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface InitializedParams {}
 
 export interface Diagnostic {
@@ -43,7 +45,7 @@ export interface Diagnostic {
   message: string;
   tags?: DiagnosticTag[];
   relatedInformation?: DiagnosticRelatedInformation[];
-  data?: any;
+  data?: unknown;
 }
 
 export interface Range {

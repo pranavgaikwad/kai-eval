@@ -5,8 +5,8 @@ import * as path from "path";
 import { Logger } from "winston";
 
 import { TaskProvider, Task, BaseInitParams } from "./types";
-import { EventDebouncer } from "../eventDebouncer";
-import { FileWatchCapable, FileChangeEvent } from "../fsWatch";
+import { EventDebouncer } from "../utils/eventDebouncer";
+import { FileWatchCapable, FileChangeEvent } from "../utils/fsWatch";
 import { DiagnosticsManager } from "./managers/diagnosticsManager";
 import {
   InitializeParams,
@@ -16,9 +16,10 @@ import { LSPConnectionManager } from "./managers/lspConnectionManager";
 import { ProcessManager } from "./managers/processManager";
 
 export interface JavaDiagnosticsInitParams extends BaseInitParams {
-  jdtBinaryPath: string;
-  bundles: string[];
+  jdtlsBinaryPath: string;
+  jdtlsBundles: string[];
   jvmMaxMem?: string;
+  logDir?: string;
 }
 
 export interface JavaDiagnosticsInitResult {
@@ -57,10 +58,31 @@ export class JavaDiagnosticsTasksProvider
     this.tempDir = await this.createTempDirectory();
     const javaExecutable = await this.getJavaExecutable();
     const jdtlsArgs = await this.buildJdtlsArgs(params);
+    const logDir = params.logDir || path.join(os.tmpdir(), "jdtls-logs");
+    this.logger.debug("Spawning JDTLS process", { logDir });
+    try {
+      await fs.mkdir(logDir, { recursive: true });
+    } catch (error) {
+      throw new Error(`Failed to create log directory: ${logDir} - ${error}`);
+    }
     const { pipeName } = await this.processManager.spawn(javaExecutable, jdtlsArgs, {
       cwd: this.tempDir,
       onExit: () => {
         this.initialized = false;
+      },
+      onStderr: async (data) => {
+        try {
+          await fs.appendFile(path.join(logDir, "jdtls.log"), data);
+        } catch (error) {
+          this.logger.error("Failed to append JDTLS stderr to log file", { error });
+        }
+      },
+      onStdout: async (data) => {
+        try {
+          await fs.appendFile(path.join(logDir, "jdtls.log"), data);
+        } catch (error) {
+          this.logger.error("Failed to append JDTLS stdout to log file", { error });
+        }
       },
       usePipeBridge: true,
     });
@@ -117,7 +139,7 @@ export class JavaDiagnosticsTasksProvider
   }
 
   private async validateInitParams(params: JavaDiagnosticsInitParams): Promise<void> {
-    if (!params.jdtBinaryPath) {
+    if (!params.jdtlsBinaryPath) {
       throw new Error("jdtBinaryPath is required");
     }
     if (!params.workspacePaths || params.workspacePaths.length === 0) {
@@ -125,10 +147,10 @@ export class JavaDiagnosticsTasksProvider
     }
 
     try {
-      await fs.access(params.jdtBinaryPath);
+      await fs.access(params.jdtlsBinaryPath);
     } catch (error) {
       throw new Error(
-        `JDTLS binary not found at path: ${params.jdtBinaryPath} - ${error}`
+        `JDTLS binary not found at path: ${params.jdtlsBinaryPath} - ${error}`
       );
     }
 
@@ -207,7 +229,7 @@ export class JavaDiagnosticsTasksProvider
   private async buildJdtlsArgs(
     params: JavaDiagnosticsInitParams
   ): Promise<string[]> {
-    const jdtlsBaseDir = path.dirname(path.dirname(params.jdtBinaryPath));
+    const jdtlsBaseDir = path.dirname(path.dirname(params.jdtlsBinaryPath));
     const sharedConfigPath = await this.getSharedConfigPath(jdtlsBaseDir);
     const jarPath = await this.findEquinoxLauncher(jdtlsBaseDir);
 
@@ -258,9 +280,9 @@ export class JavaDiagnosticsTasksProvider
     );
 
     let absoluteBundles: string[] = [];
-    if (params.bundles) {
+    if (params.jdtlsBundles) {
       absoluteBundles = await Promise.all(
-        params.bundles.map(async (bundle) => {
+        params.jdtlsBundles.map(async (bundle) => {
           return path.resolve(bundle);
         })
       );
@@ -340,11 +362,12 @@ export class JavaDiagnosticsTasksProvider
             await this.connectionManager.openTextDocument(
               event.path, await fs.readFile(event.path, 'utf-8'));
             break;
-          case "modified":
+          case "modified": {
             const fileContent = await fs.readFile(event.path, 'utf-8');
             await this.connectionManager.openTextDocument(event.path, fileContent);
             await this.connectionManager.changeTextDocument(event.path, fileContent);
             break;
+          }
           case "deleted":
             await this.connectionManager.closeTextDocument(event.path);
             break;

@@ -4,8 +4,8 @@ import { ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { Logger } from "winston";
 
 import { Task, TaskProvider, BaseInitParams } from "./types";
-import { EventDebouncer } from "../eventDebouncer";
-import { FileWatchCapable, FileChangeEvent } from "../fsWatch";
+import { EventDebouncer } from "../utils/eventDebouncer";
+import { FileWatchCapable, FileChangeEvent } from "../utils/fsWatch";
 
 export interface AnalyzerInitParams extends BaseInitParams {
   analyzerBinaryPath: string;

@@ -4,6 +4,7 @@ build/
 out/
 *.tsbuildinfo
 .env
+.config.json
 .vscode/
 .idea/
 *.swp

@@ -5,6 +5,8 @@ import {
   StreamMessageReader,
   StreamMessageWriter,
   MessageConnection,
+  NotificationType,
+  RequestType,
 } from "vscode-jsonrpc/node";
 import { Logger } from "winston";
 
@@ -70,7 +72,7 @@ export class LSPConnectionManager {
   }
 
   async sendRequest<TParams, TResult>(
-    requestType: any,
+    requestType: RequestType<TParams, TResult, Error>,
     params: TParams
   ): Promise<TResult> {
     if (!this.connection) {
@@ -80,7 +82,7 @@ export class LSPConnectionManager {
   }
 
   async sendNotification<TParams>(
-    notificationType: any,
+    notificationType: NotificationType<TParams>,
     params: TParams
   ): Promise<void> {
     if (!this.connection) {

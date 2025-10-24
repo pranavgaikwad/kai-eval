@@ -1,22 +1,20 @@
 import { Logger } from "winston";
 
-import { FileWatchCapable, SharedFileWatcher } from "./fsWatch";
 import {
   AnalysisTasksProvider,
   AnalyzerInitParams,
-} from "./taskProviders/analysisTasksProvider";
-import {
   JavaDiagnosticsTasksProvider,
   JavaDiagnosticsInitParams,
   JavaDiagnosticsInitResult,
-} from "./taskProviders/javaDiagnosticsTasksProvider";
-import { TaskProvider } from "./taskProviders/types";
-import { getExcludedPaths } from "./taskProviders/utils";
+  TaskProvider,
+} from "./taskProviders";
+import { FileWatchCapable, SharedFileWatcher } from "./utils/fsWatch";
+import { getExcludedPaths } from "./utils/paths";
 
 export interface TaskProviderSetupConfig {
   workspacePaths: string[];
   logger: Logger;
-  diagnosticsParams?: JavaDiagnosticsInitParams;
+  diagnosticsParams?: Omit<JavaDiagnosticsInitParams, "workspacePaths">;
   analysisParams?: Omit<AnalyzerInitParams, "pipePath" | "excludedPaths" | "workspacePaths">;
 }
 
@@ -45,7 +43,10 @@ export async function setupProviders(
       config.logger.info("Initializing DiagnosticsProvider");
 
       const diagProvider = new JavaDiagnosticsTasksProvider(config.logger);
-      diagResult = await diagProvider.init(config.diagnosticsParams);
+      diagResult = await diagProvider.init({
+        ...config.diagnosticsParams,
+        workspacePaths: config.workspacePaths,
+      });
 
       providers.push(diagProvider);
       providerMap.set("diagnostics", diagProvider);

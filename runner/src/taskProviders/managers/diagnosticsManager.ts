@@ -3,32 +3,33 @@ import { Logger } from "winston";
 import { Diagnostic, PublishDiagnosticsParams } from "./lsp";
 import { Task } from "../types";
 
-export class DiagnosticTask implements Task {
-  constructor(private readonly diagnostic: Diagnostic) {}
+class DiagnosticTask implements Task {
+  constructor(private readonly d: Diagnostic) {}
 
   getID(): string {
-    const uri = this.diagnostic.uri || "";
-    const line = this.diagnostic.range.start.line;
-    const char = this.diagnostic.range.start.character;
-    return `${uri}:${line}:${char}`;
+    return `${this.d.uri}:${this.d.message}:${this.d.severity}:${this.d.source}:${this.d.code?.toString() ?? ""}`;
   }
 
-  toJSON(): Record<string, any> {
+  toJSON(): Record<string, string|number|boolean|undefined> {
     return {
       id: this.getID(),
-      type: this.mapDiagnosticSeverity(this.diagnostic.severity),
+      type: this.mapDiagnosticSeverity(this.d.severity),
       category: "diagnostic",
-      description: this.diagnostic.message,
-      file: this.diagnostic.uri ? this.uriToPath(this.diagnostic.uri) : "",
-      line: this.diagnostic.range.start.line + 1, // Convert to 1-based
-      column: this.diagnostic.range.start.character + 1, // Convert to 1-based
-      rule: this.diagnostic.code?.toString(),
-      source: this.diagnostic.source || "lsp",
+      description: this.d.message,
+      file: this.getUri(),
+      line: this.d.range.start.line + 1, // Convert to 1-based
+      column: this.d.range.start.character + 1, // Convert to 1-based
+      rule: this.d.code?.toString(),
+      source: this.d.source || "lsp",
     };
   }
 
   toString(): string {
     return JSON.stringify(this.toJSON());
+  }
+
+  getUri(): string {
+    return this.d.uri ? this.uriToPath(this.d.uri) : "";
   }
 
   private mapDiagnosticSeverity(severity?: number): string {
