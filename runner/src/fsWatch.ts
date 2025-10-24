@@ -70,12 +70,12 @@ export class SharedFileWatcher {
       "**/cache/**",
     ],
     persistent: true,
-    ignoreInitial: true, // Don't emit events for existing files on startup
+    ignoreInitial: true,
     followSymlinks: false,
-    depth: undefined, // Watch all subdirectories
+    depth: undefined,
     awaitWriteFinish: {
-      stabilityThreshold: 100, // Wait 100ms after file stops changing
-      pollInterval: 50, // Poll every 50ms to check if file is stable
+      stabilityThreshold: 100,
+      pollInterval: 50,
     },
   };
 

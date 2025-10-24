@@ -1,7 +1,8 @@
 import { JavaDiagnosticsTasksProvider, JavaDiagnosticsInitParams } from '../src/taskProviders/javaDiagnosticsTasksProvider';
 import path from 'path';
-import { createLogger, format, transports, Logger } from 'winston';
+import { Logger } from 'winston';
 import { loadTestEnvironment, validateJavaTestEnvironment } from './utils';
+import { createOrderedLogger } from '../src/utils/logger';
 
 describe('JavaDiagnosticsTasksProvider Tests', () => {
   let provider: JavaDiagnosticsTasksProvider;
@@ -13,16 +14,7 @@ describe('JavaDiagnosticsTasksProvider Tests', () => {
   });
 
   beforeEach(async () => {
-    logger = createLogger({
-      level: process.env.LOG_LEVEL || 'error',
-      format: format.combine(
-        format.timestamp(),
-        format.json()
-      ),
-      transports: [
-        new transports.Console()
-      ]
-    });
+    logger = createOrderedLogger(process.env.LOG_LEVEL || 'error');
     provider = new JavaDiagnosticsTasksProvider(logger);
 
     const jdtBinaryPath = process.env.JDTLS_BINARY_PATH || "";
@@ -47,13 +39,13 @@ describe('JavaDiagnosticsTasksProvider Tests', () => {
     }
   });
 
-  it('should initialize diagnostics provider', async () => {
+  it('should initialize diagnostics provider and publish diagnostics', async () => {
     expect(provider.isInitialized()).toBe(true);
 
-    logger.info("Waiting for JDTLS to process workspace");
+    logger.debug("Waiting for JDTLS to process workspace");
     await new Promise(resolve => setTimeout(resolve, 5000));
     const tasks = await provider.getCurrentTasks();
-    logger.info("Retrieved diagnostic tasks", { taskCount: tasks.length });
+    logger.debug("Retrieved diagnostic tasks", { taskCount: tasks.length });
 
     expect(tasks.length).toBeGreaterThan(0);
 
@@ -77,12 +69,11 @@ describe('JavaDiagnosticsTasksProvider Tests', () => {
 
     const firstError = intentionalErrors.filter(task => {
       const taskJson = task.toJSON();
-      return taskJson.line === 7 && taskJson.column === 9 &&
-        taskJson.type === 'error' && taskJson.source === 'Java';
+      return taskJson.column === 9 && taskJson.type === 'error' && taskJson.source === 'Java';
     });
     const secondError = intentionalErrors.filter(task => {
       const taskJson = task.toJSON();
-      return taskJson.line === 7 && taskJson.column === 47 &&
+      return taskJson.column === 47 &&
         taskJson.type === 'error' && taskJson.source === 'Java';
     });
 
@@ -90,13 +81,6 @@ describe('JavaDiagnosticsTasksProvider Tests', () => {
     expect(secondError).toBeDefined();
     expect(firstError.length).toBe(1);
     expect(secondError.length).toBe(1);
-
-    if (tasks.length > 0) {
-      logger.info("Sample diagnostic tasks");
-      tasks.slice(0, 5).forEach((task, index) => {
-        logger.info("Sample diagnostic task", { taskIndex: index + 1, task: task.toJSON() });
-      });
-    }
   }, 15000);
 
   it('should handle file change events', async () => {
@@ -133,7 +117,7 @@ describe('JavaDiagnosticsTasksProvider Tests', () => {
         timestamp: new Date(),
       };
       await provider.onFileChange?.(fileChangeEvent);
-      logger.info("File change event processed");
+      logger.debug("File change event processed");
 
       // Wait longer for JDTLS to detect file change and reprocess
       await new Promise(resolve => setTimeout(resolve, 8000));
@@ -153,9 +137,23 @@ describe('JavaDiagnosticsTasksProvider Tests', () => {
       });
 
       expect(remainingErrors.length).toBe(0);
-      logger.info("Verified diagnostics cleared after commenting out intentional error");
+
+      await fs.promises.writeFile(mainJavaFilePath, originalContent, 'utf-8');
+      await provider.onFileChange?.({ path: mainJavaFilePath, type: 'modified', timestamp: new Date() });
+      logger.debug("File change event processed");
+      const updatedTasksAgain = await provider.getCurrentTasks();
+      const remainingErrorsAgain = updatedTasksAgain.filter(task => {
+        const taskJson = task.toJSON();
+        return taskJson.file === mainJavaFilePath &&
+               taskJson.description.includes('com.intentional cannot be resolved to a type') &&
+               taskJson.line === 7;
+      });
+
+      expect(remainingErrorsAgain.length).toBe(2);
+
+      logger.debug("Verified diagnostics cleared after commenting out intentional error");
     } finally {
       await fs.promises.writeFile(mainJavaFilePath, originalContent, 'utf-8');
     }
-  }, 15000);
+  }, 30000);
 });

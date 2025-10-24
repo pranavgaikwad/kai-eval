@@ -39,7 +39,6 @@ export class EventDebouncer<TEvent> {
 
   async waitUntilIdle(timeoutMs: number = 10000): Promise<void> {
     const startTime = Date.now();
-    
     const checkIdle = async (): Promise<void> => {
       if (Date.now() - startTime > timeoutMs) {
         this.logger.warn("EventDebouncer waitUntilIdle timed out", { timeoutMs });

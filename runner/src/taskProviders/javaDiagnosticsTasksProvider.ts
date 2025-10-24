@@ -35,6 +35,7 @@ export class JavaDiagnosticsTasksProvider
   private initialized = false;
   private tempDir?: string;
   private pipeName?: string;
+  private diagnosticsUpdatePromise?: { resolve: () => void; timeout: NodeJS.Timeout };
 
   constructor(private readonly logger: Logger) {
     this.connectionManager = new LSPConnectionManager(logger);
@@ -69,11 +70,18 @@ export class JavaDiagnosticsTasksProvider
     await this.connectionManager.connectToPipe(pipeName);
     this.connectionManager.onDiagnostics((params) => {
       this.diagnosticsManager.updateDiagnostics(params);
+
+      // Resolve any pending diagnostics update promise
+      if (this.diagnosticsUpdatePromise) {
+        clearTimeout(this.diagnosticsUpdatePromise.timeout);
+        this.diagnosticsUpdatePromise.resolve();
+        this.diagnosticsUpdatePromise = undefined;
+      }
     });
     const initParams = await this.buildJavaInitializeParams(params);
-    this.logger.info("Sending initialize request to LSP server");
+    this.logger.debug("Sending initialize request to LSP server");
     await this.connectionManager.sendInitialize(initParams);
-    this.logger.info("Initialize request sent to LSP server");
+    this.logger.debug("Initialize request sent to LSP server");
     this.initialized = true;
     return { pipeName };
   }
@@ -301,25 +309,24 @@ export class JavaDiagnosticsTasksProvider
   }
 
   private async getLatestDiagnostics(events: FileChangeEvent[]): Promise<void> {
-    this.logger.info("Processing file changes", {
+    this.logger.debug("Processing file changes", {
       changeCount: events.length
     });
-
-    events.forEach((event) => {
-      this.logger.debug("Processing file change event", {
-        type: event.type,
-        path: event.path,
-        timestamp: event.timestamp.toISOString()
-      });
-    });
-
     try {
       await this.notifyFileChanges(events);
-
-      // Wait for JDTLS to process the changes and send updated diagnostics
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      this.logger.info("File changes processed and Java diagnostics refreshed");
+      // wait for diagnostics to be updated
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          if (this.diagnosticsUpdatePromise === undefined) {
+            resolve();
+          } else {
+            this.diagnosticsUpdatePromise = undefined;
+            resolve();
+          }
+        }, 5000);
+        this.diagnosticsUpdatePromise = { resolve, timeout };
+      });
+      this.logger.debug("File changes processed and Java diagnostics refreshed");
     } catch (error) {
       this.logger.warn("Failed to refresh Java diagnostics", { error });
     }
@@ -328,14 +335,26 @@ export class JavaDiagnosticsTasksProvider
   private async notifyFileChanges(events: FileChangeEvent[]): Promise<void> {
     for (const event of events) {
       try {
-        if (event.type === 'modified') {
-          const fileContent = await fs.readFile(event.path, 'utf-8');
-
-          await this.connectionManager.notifyFileChange(event.path, fileContent);
+        switch (event.type) {
+          case "created":
+            await this.connectionManager.openTextDocument(
+              event.path, await fs.readFile(event.path, 'utf-8'));
+            break;
+          case "modified":
+            const fileContent = await fs.readFile(event.path, 'utf-8');
+            await this.connectionManager.openTextDocument(event.path, fileContent);
+            await this.connectionManager.changeTextDocument(event.path, fileContent);
+            break;
+          case "deleted":
+            await this.connectionManager.closeTextDocument(event.path);
+            break;
+          default:
+            this.logger.warn("Unknown file change event type", { type: event.type, path: event.path });
         }
       } catch (error) {
         this.logger.warn("Failed to notify file change", {
           path: event.path,
+          type: event.type,
           error
         });
       }
@@ -376,7 +395,7 @@ export class JavaDiagnosticsTasksProvider
 
   private async createTempDirectory(): Promise<string> {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "jdtls-"));
-    this.logger.info("Created temporary directory for JDTLS", { tempDir });
+    this.logger.debug("Created temporary directory for JDTLS", { tempDir });
     return tempDir;
   }
 
@@ -385,7 +404,7 @@ export class JavaDiagnosticsTasksProvider
 
     try {
       await fs.rm(this.tempDir, { recursive: true, force: true });
-      this.logger.info("Cleaned up temporary directory", { tempDir: this.tempDir });
+      this.logger.debug("Cleaned up temporary directory", { tempDir: this.tempDir });
     } catch (error) {
       this.logger.warn("Failed to cleanup temporary directory", { tempDir: this.tempDir, error });
     }

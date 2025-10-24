@@ -139,6 +139,14 @@ export const DidOpenTextDocumentNotification = new NotificationType<DidOpenTextD
   "textDocument/didOpen",
 );
 
+export interface DidCloseTextDocumentParams {
+  textDocument: TextDocumentIdentifier;
+}
+
+export const DidCloseTextDocumentNotification = new NotificationType<DidCloseTextDocumentParams>(
+  "textDocument/didClose",
+);
+
 
 // Utility functions for LSP operations
 export function mapDiagnosticSeverity(severity?: DiagnosticSeverity): string {

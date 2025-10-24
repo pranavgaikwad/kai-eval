@@ -68,10 +68,8 @@ export class DiagnosticsManager {
     });
 
     if (params.diagnostics.length === 0) {
-      // Clear diagnostics for this file
       this.diagnosticsMap.delete(params.uri);
     } else {
-      // Update diagnostics for this file
       this.diagnosticsMap.set(params.uri, params.diagnostics);
     }
   }
