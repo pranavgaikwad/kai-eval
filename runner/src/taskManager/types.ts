@@ -1,4 +1,4 @@
-import { Task } from "../taskProviders/types";
+import { Task } from "../taskProviders/types/taskProvider";
 
 export interface TaskSnapshot {
   id: number;

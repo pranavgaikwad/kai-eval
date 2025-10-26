@@ -11,6 +11,7 @@ import {
 import { Logger } from "winston";
 
 
+import { pathToUri } from "../../utils/paths";
 import {
   InitializeParams,
   InitializeResult,
@@ -24,9 +25,13 @@ import {
   DidOpenTextDocumentParams,
   DidCloseTextDocumentNotification,
   DidCloseTextDocumentParams,
-} from "./lsp";
+} from "../types/lsp";
 
-export class LSPConnectionManager {
+
+/**
+ * RPC client connection manager with some lsp specific helpers
+ */
+export class RPCConnectionManager {
   private connection?: MessageConnection;
   private documentVersions = new Map<string, number>();
   private openedDocuments = new Set<string>();
@@ -91,6 +96,16 @@ export class LSPConnectionManager {
     await this.connection.sendNotification(notificationType, params);
   }
 
+  onRequest<TParams, TResult>(
+    requestType: RequestType<TParams, TResult, Error>,
+    handler: (params: TParams) => Promise<TResult> | TResult
+  ): void {
+    if (!this.connection) {
+      throw new Error("Not connected to LSP server");
+    }
+    this.connection.onRequest(requestType, handler);
+  }
+
   isConnected(): boolean {
     return this.connection !== undefined;
   }
@@ -101,7 +116,7 @@ export class LSPConnectionManager {
       throw new Error("Not connected to LSP server");
     }
 
-    const uri = this.pathToUri(filePath);
+    const uri = pathToUri(filePath);
 
     if (this.openedDocuments.has(uri)) {
       this.logger.debug("Document already opened, skipping open notification", { uri });
@@ -130,7 +145,7 @@ export class LSPConnectionManager {
       throw new Error("Not connected to LSP server");
     }
 
-    const uri = this.pathToUri(filePath);
+    const uri = pathToUri(filePath);
 
     if (!this.openedDocuments.has(uri)) {
       this.logger.debug("Document not opened, cannot send change notification", { uri });
@@ -163,7 +178,7 @@ export class LSPConnectionManager {
       throw new Error("Not connected to LSP server");
     }
 
-    const uri = this.pathToUri(filePath);
+    const uri = pathToUri(filePath);
 
     if (!this.openedDocuments.has(uri)) {
       this.logger.debug("Document not opened, skipping close notification", { uri });
@@ -180,15 +195,6 @@ export class LSPConnectionManager {
 
     this.openedDocuments.delete(uri);
     this.documentVersions.delete(uri);
-  }
-
-  private pathToUri(filePath: string): string {
-    const normalizedPath = filePath.replace(/\\/g, "/");
-    if (normalizedPath.startsWith("/")) {
-      return `file://${normalizedPath}`;
-    } else {
-      return `file:///${normalizedPath}`;
-    }
   }
 
   async disconnect(): Promise<void> {

@@ -11,7 +11,8 @@ export interface ProcessSpawnOptions extends SpawnOptions {
   onStderr?: (data: string) => void;
   onError?: (error: Error) => void;
   onExit?: (code: number | null, signal: NodeJS.Signals | null) => void;
-  usePipeBridge?: boolean;
+  pipeName?: string;
+  listenOnPipe?: boolean;
 }
 
 export interface ProcessSpawnResult {
@@ -41,9 +42,8 @@ export class ProcessManager {
     });
 
     this.setupEventHandlers(onStdout, onStderr, onError, onExit);
-    let pipeName: string | undefined;
-    if (options?.usePipeBridge) {
-      pipeName = await this.generatePipeName();
+    const pipeName = options?.pipeName || ProcessManager.generatePipeName();
+    if (options?.listenOnPipe) {
       await this.createPipeBridge(pipeName);
     }
     return { process: this.process, pipeName };  
@@ -102,7 +102,7 @@ export class ProcessManager {
     }
 
     this.server = net.createServer((socket) => {
-      this.logger.info("Client connected to named pipe");
+      this.logger.debug("Client connected to named pipe");
 
       socket.pipe(this.process!.stdin!);
       this.process!.stdout!.pipe(socket);
@@ -112,13 +112,13 @@ export class ProcessManager {
       });
 
       socket.on("close", () => {
-        this.logger.info("Client disconnected from named pipe");
+        this.logger.debug("Client disconnected from named pipe");
       });
     });
 
     return new Promise<void>((resolve, reject) => {
       this.server!.listen(pipeName, () => {
-        this.logger.info("Named pipe server listening", { pipeName });
+        this.logger.debug("Named pipe server listening", { pipeName });
         resolve();
       });
 
@@ -153,7 +153,7 @@ export class ProcessManager {
     });
 
     this.process.on("exit", (code, signal) => {
-      this.logger.info("Process exited", { code, signal });
+      this.logger.debug("Process exited", { code, signal });
       if (onExit) {
         onExit(code, signal);
       }
@@ -182,7 +182,7 @@ export class ProcessManager {
     }
   }
 
-  private async generatePipeName(): Promise<string> {
+  static generatePipeName(): string {
     const tmpDir = os.tmpdir();
     const pipeName = path.join(
       tmpDir,

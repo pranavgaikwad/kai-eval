@@ -124,13 +124,13 @@ export class SharedFileWatcher {
         .on("unlinkDir", (path) => this.handleDirectoryDeleted(path))
         .on("error", (error) => this.handleWatchError(error))
         .on("ready", () => {
-          this.logger.info("File watcher is ready and watching base paths", {
+          this.logger.debug("File watcher is ready and watching base paths", {
             basePathCount: this.basePaths.length
           });
         });
 
       this.isWatching = true;
-      this.logger.info("File watcher started successfully");
+      this.logger.debug("File watcher started successfully");
     } catch (error) {
       this.logger.error({"msg": "Failed to start file watcher", error});
       throw error;
@@ -153,7 +153,7 @@ export class SharedFileWatcher {
 
       this.isWatching = false;
       this.providers.clear();
-      this.logger.info("File watcher stopped successfully");
+      this.logger.debug("File watcher stopped successfully");
     } catch (error) {
       this.logger.error({"msg": "Error stopping file watcher", error});
       throw error;
@@ -181,7 +181,7 @@ export class SharedFileWatcher {
       type: eventType,
       timestamp: new Date(),
     };
-    this.logger.info("File event", { eventType, filePath });
+    this.logger.debug("File event", { eventType, filePath });
     const notificationPromises = Array.from(this.providers).map(
       async (provider) => {
         try {
@@ -197,7 +197,7 @@ export class SharedFileWatcher {
   }
 
   private async handleDirectoryDeleted(dirPath: string): Promise<void> {
-    this.logger.info("Directory deleted", { dirPath });
+    this.logger.debug("Directory deleted", { dirPath });
     const deletedBasePathIndex = this.basePaths.findIndex(
       (basePath) => dirPath === basePath || basePath.startsWith(dirPath + "/"),
     );

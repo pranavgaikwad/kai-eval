@@ -19,7 +19,10 @@ export interface TaskProviderSetupConfig {
 }
 
 export interface TaskProviderSetupResult {
-  providers: TaskProvider[];
+  providers: {
+    diagnostics?: JavaDiagnosticsTasksProvider;
+    analysis?: AnalysisTasksProvider;
+  };
   shutdown: () => Promise<void>;
 }
 
@@ -32,7 +35,10 @@ export async function setupProviders(
 
   const fileWatcher = SharedFileWatcher.getInstance(config.logger, config.workspacePaths);
   const providers: TaskProvider[] = [];
-  const providerMap = new Map<string, TaskProvider>();
+  const providerMap: {
+    diagnostics?: JavaDiagnosticsTasksProvider;
+    analysis?: AnalysisTasksProvider;
+  } = {};
 
   config.logger.info("Setting up task management");
 
@@ -49,7 +55,7 @@ export async function setupProviders(
       });
 
       providers.push(diagProvider);
-      providerMap.set("diagnostics", diagProvider);
+      providerMap.diagnostics = diagProvider;
 
       if (
         "onFileChange" in diagProvider &&
@@ -84,7 +90,7 @@ export async function setupProviders(
       });
 
       providers.push(analysisProvider);
-      providerMap.set("analysis", analysisProvider);
+      providerMap.analysis = analysisProvider;
 
       // Register with file watcher if it supports file watching
       if (
@@ -135,7 +141,7 @@ export async function setupProviders(
     });
 
     return {
-      providers,
+      providers: providerMap,
       shutdown,
     };
   } catch (error) {

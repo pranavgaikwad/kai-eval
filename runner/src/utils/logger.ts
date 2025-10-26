@@ -1,12 +1,13 @@
 import { createLogger, format, transports, Logger } from 'winston';
 
 export const orderedJsonFormat = format.printf((info) => {
-  const { timestamp, level, message, ...rest } = info;
+  const { timestamp, level, message, module, ...rest } = info;
 
   const ordered: Record<string, unknown> = {};
 
   if (timestamp) ordered.timestamp = timestamp;
   if (level) ordered.level = level;
+  if (module) ordered.module = module;
   if (message) ordered.message = message;
 
   const sortedKeys = Object.keys(rest).sort();

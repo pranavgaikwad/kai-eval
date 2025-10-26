@@ -148,36 +148,3 @@ export interface DidCloseTextDocumentParams {
 export const DidCloseTextDocumentNotification = new NotificationType<DidCloseTextDocumentParams>(
   "textDocument/didClose",
 );
-
-
-// Utility functions for LSP operations
-export function mapDiagnosticSeverity(severity?: DiagnosticSeverity): string {
-  switch (severity) {
-    case DiagnosticSeverity.Error:
-      return "error";
-    case DiagnosticSeverity.Warning:
-      return "warning";
-    case DiagnosticSeverity.Information:
-      return "info";
-    case DiagnosticSeverity.Hint:
-      return "hint";
-    default:
-      return "info";
-  }
-}
-
-export function uriToPath(uri: string): string {
-  if (uri.startsWith("file://")) {
-    return decodeURIComponent(uri.substring(7));
-  }
-  return uri;
-}
-
-export function pathToUri(filePath: string): string {
-  const normalizedPath = filePath.replace(/\\/g, "/");
-  if (normalizedPath.startsWith("/")) {
-    return `file://${normalizedPath}`;
-  } else {
-    return `file:///${normalizedPath}`;
-  }
-}

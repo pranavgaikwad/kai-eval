@@ -19,7 +19,7 @@ export interface KaiRunnerConfig {
 
   // Analysis
   kaiAnalyzerRpcPath?: string;
-  rulesPath?: string[];
+  rulesPaths?: string[];
   targets?: string[];
   sources?: string[];
 

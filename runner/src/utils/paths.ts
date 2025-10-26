@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import * as path from "path";
+import { fileURLToPath } from "url";
 
-import { globby } from "globby";
 import { Logger } from "winston";
 
 /**
@@ -16,13 +16,14 @@ export async function getExcludedPaths(logger: Logger, workspacePaths: string[])
 
   for (const workspacePath of workspacePaths) {
     try {
-      logger.info("Processing ignore files for workspace", { workspacePath });
+      logger.debug("Processing ignore files for workspace", { workspacePath });
       const patterns = await getIgnorePatterns(logger, workspacePath);
       if (patterns.length === 0) {
-        logger.info("No ignore patterns found in workspace", { workspacePath });
+        logger.debug("No ignore patterns found in workspace", { workspacePath });
         continue;
       }
-      logger.info("Found ignore patterns in workspace", { patternCount: patterns.length, workspacePath });
+      logger.debug("Found ignore patterns in workspace", { patternCount: patterns.length, workspacePath });
+      const { globby } = await import("globby");
       const excludedPaths = await globby(patterns, {
         cwd: workspacePath,
         absolute: true,
@@ -31,14 +32,14 @@ export async function getExcludedPaths(logger: Logger, workspacePaths: string[])
         dot: true,
         ignore: [],
       });
-      logger.info("Resolved excluded paths for workspace", { excludedPathCount: excludedPaths.length, workspacePath });
+      logger.debug("Resolved excluded paths for workspace", { excludedPathCount: excludedPaths.length, workspacePath });
       allExcludedPaths.push(...excludedPaths);
     } catch (error) {
       logger.error("Error processing ignore files for workspace", { workspacePath, error });
     }
   }
   const uniqueExcludedPaths = [...new Set(allExcludedPaths)];
-  logger.info("Total unique excluded paths across all workspaces", { uniqueExcludedPathCount: uniqueExcludedPaths.length });
+  logger.debug("Total unique excluded paths across all workspaces", { uniqueExcludedPathCount: uniqueExcludedPaths.length });
   return uniqueExcludedPaths;
 }
 
@@ -59,10 +60,10 @@ async function getIgnorePatterns(logger: Logger, workspacePath: string): Promise
       const content = await fs.readFile(ignoreFilePath, 'utf-8');
       const filePatterns = parseIgnoreFileContent(logger, content);
       patterns.push(...filePatterns);
-      logger.info("Loaded patterns from ignore file", { patternCount: filePatterns.length, ignoreFilePath });
+      logger.debug("Loaded patterns from ignore file", { patternCount: filePatterns.length, ignoreFilePath });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        logger.info("Ignore file not found", { ignoreFilePath });
+        logger.debug("Ignore file not found", { ignoreFilePath });
       } else {
         logger.error("Error reading ignore file", { ignoreFilePath, error });
       }
@@ -91,4 +92,29 @@ function parseIgnoreFileContent(logger: Logger, content: string): string[] {
       logger.debug("Parsed ignore pattern", { pattern });
       return pattern;
     });
+}
+
+/**
+ * Adds file:// to a local path
+ * @param filePath string file path
+ * @returns 
+ */
+export function pathToUri(filePath: string): string {
+  const normalizedPath = filePath.replace(/\\/g, "/");
+  if (normalizedPath.startsWith("/")) {
+    return `file://${normalizedPath}`;
+  } else {
+    return `file:///${normalizedPath}`;
+  }
+}
+
+/**
+ * Converts file:// to a local fs path
+ * @param path input path to clean
+ */
+export function fileUriToPath(path: string): string {
+  const cleanPath = path.startsWith("file://") ? fileURLToPath(path) : path;
+  return process.platform === "win32" && cleanPath.startsWith("/")
+    ? cleanPath.replace("/", "")
+    : cleanPath;
 }

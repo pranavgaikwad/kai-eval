@@ -4,16 +4,18 @@ import * as path from "path";
 
 import { Logger } from "winston";
 
-import { TaskProvider, Task, BaseInitParams } from "./types";
+import { DiagnosticTask, DiagnosticTaskFactory } from "./tasks";
+import { TaskProvider, Task, BaseInitParams } from "./types/taskProvider";
 import { EventDebouncer } from "../utils/eventDebouncer";
 import { FileWatchCapable, FileChangeEvent } from "../utils/fsWatch";
-import { DiagnosticsManager } from "./managers/diagnosticsManager";
-import {
-  InitializeParams,
-  pathToUri,
-} from "./managers/lsp";
-import { LSPConnectionManager } from "./managers/lspConnectionManager";
+import { TasksStoreManager } from "./managers/diagnosticsManager";
 import { ProcessManager } from "./managers/processManager";
+import { RPCConnectionManager } from "./managers/rpcConnectionManager";
+import {
+  Diagnostic,
+  InitializeParams,
+} from "./types/lsp";
+import { pathToUri } from "../utils/paths";
 
 export interface JavaDiagnosticsInitParams extends BaseInitParams {
   jdtlsBinaryPath: string;
@@ -29,18 +31,17 @@ export interface JavaDiagnosticsInitResult {
 export class JavaDiagnosticsTasksProvider
   implements FileWatchCapable, TaskProvider<JavaDiagnosticsInitParams, JavaDiagnosticsInitResult>
 {
-  private readonly connectionManager: LSPConnectionManager;
-  private readonly diagnosticsManager: DiagnosticsManager;
+  private readonly connectionManager: RPCConnectionManager;
+  private readonly diagnosticsManager: TasksStoreManager<Diagnostic, DiagnosticTask>;
   private readonly processManager: ProcessManager;
   private readonly debouncer: EventDebouncer<FileChangeEvent>;
   private initialized = false;
-  private tempDir?: string;
   private pipeName?: string;
   private diagnosticsUpdatePromise?: { resolve: () => void; timeout: NodeJS.Timeout };
 
   constructor(private readonly logger: Logger) {
-    this.connectionManager = new LSPConnectionManager(logger);
-    this.diagnosticsManager = new DiagnosticsManager(logger);
+    this.connectionManager = new RPCConnectionManager(logger);
+    this.diagnosticsManager = new TasksStoreManager(logger, new DiagnosticTaskFactory(), 'DiagnosticsManager');
     this.processManager = new ProcessManager(logger);
     this.logger = logger.child({ module: 'JavaDiagnosticsTasksProvider' });
 
@@ -55,18 +56,17 @@ export class JavaDiagnosticsTasksProvider
 
   async init(params: JavaDiagnosticsInitParams): Promise<JavaDiagnosticsInitResult> {
     await this.validateInitParams(params);
-    this.tempDir = await this.createTempDirectory();
     const javaExecutable = await this.getJavaExecutable();
     const jdtlsArgs = await this.buildJdtlsArgs(params);
     const logDir = params.logDir || path.join(os.tmpdir(), "jdtls-logs");
-    this.logger.debug("Spawning JDTLS process", { logDir });
+    this.logger.info("Spawning JDTLS process", { logDir });
     try {
       await fs.mkdir(logDir, { recursive: true });
     } catch (error) {
       throw new Error(`Failed to create log directory: ${logDir} - ${error}`);
     }
     const { pipeName } = await this.processManager.spawn(javaExecutable, jdtlsArgs, {
-      cwd: this.tempDir,
+      cwd: logDir,
       onExit: () => {
         this.initialized = false;
       },
@@ -84,14 +84,14 @@ export class JavaDiagnosticsTasksProvider
           this.logger.error("Failed to append JDTLS stdout to log file", { error });
         }
       },
-      usePipeBridge: true,
+      listenOnPipe: true,
     });
     if (!pipeName) {
       throw new Error("Failed to spawn process and create pipe");
     }
     await this.connectionManager.connectToPipe(pipeName);
     this.connectionManager.onDiagnostics((params) => {
-      this.diagnosticsManager.updateDiagnostics(params);
+      this.diagnosticsManager.updateData(params.uri, params.diagnostics);
 
       // Resolve any pending diagnostics update promise
       if (this.diagnosticsUpdatePromise) {
@@ -125,12 +125,6 @@ export class JavaDiagnosticsTasksProvider
       await this.processManager.cleanupFile(this.pipeName);
       this.pipeName = undefined;
     }
-
-    if (this.tempDir) {
-      await this.cleanupTempDirectory();
-      this.tempDir = undefined;
-    }
-
     this.initialized = false;
   }
 
@@ -273,11 +267,8 @@ export class JavaDiagnosticsTasksProvider
       })
     );
 
-    const primaryWorkspacePath = absoluteWorkspacePaths[0];
-    const primaryWorkspaceUri = pathToUri(primaryWorkspacePath);
-    const workspaceFolders: string[] = absoluteWorkspacePaths.map((wsPath) =>
-      pathToUri(wsPath)
-    );
+    const primaryWorkspacePath = path.resolve(absoluteWorkspacePaths[0]);
+    const workspaceFolders = absoluteWorkspacePaths.map((path) => pathToUri(path));
 
     let absoluteBundles: string[] = [];
     if (params.jdtlsBundles) {
@@ -289,7 +280,7 @@ export class JavaDiagnosticsTasksProvider
     }
 
     return {
-      rootUri: primaryWorkspaceUri,
+      rootUri: pathToUri(primaryWorkspacePath),
       capabilities: {
         workspace: {
           workspaceFolders: true,
@@ -415,21 +406,5 @@ export class JavaDiagnosticsTasksProvider
     });
     return Array.from(eventMap.values());
   }
-
-  private async createTempDirectory(): Promise<string> {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "jdtls-"));
-    this.logger.debug("Created temporary directory for JDTLS", { tempDir });
-    return tempDir;
-  }
-
-  private async cleanupTempDirectory(): Promise<void> {
-    if (!this.tempDir) return;
-
-    try {
-      await fs.rm(this.tempDir, { recursive: true, force: true });
-      this.logger.debug("Cleaned up temporary directory", { tempDir: this.tempDir });
-    } catch (error) {
-      this.logger.warn("Failed to cleanup temporary directory", { tempDir: this.tempDir, error });
-    }
-  }
 }
+

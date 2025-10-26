@@ -52,7 +52,7 @@ async function main(): Promise<void> {
       jdtlsBundles: options.jdtlsBundles?.split(","),
       jvmMaxMem: options.jvmMaxMem,
       kaiAnalyzerRpcPath: options.kaiAnalyzerRpcPath,
-      rulesPath: options.rulesPath?.split(","),
+      rulesPaths: options.rulesPath?.split(","),
       targets: options.targets?.split(","),
       sources: options.sources?.split(","),
       solutionServerUrl: options.solutionServerUrl,
@@ -90,24 +90,32 @@ async function main(): Promise<void> {
           jdtlsBinaryPath: finalConfig.jdtlsBinaryPath,
           jdtlsBundles: finalConfig.jdtlsBundles || [],
           jvmMaxMem: finalConfig.jvmMaxMem,
+          logDir,
         },
       }),
       ...(finalConfig.kaiAnalyzerRpcPath && {
         analysisParams: {
           analyzerBinaryPath: finalConfig.kaiAnalyzerRpcPath,
-          rulesPaths: finalConfig.rulesPath || [],
+          rulesPaths: finalConfig.rulesPaths || [],
           targets: finalConfig.targets || [],
           sources: finalConfig.sources || [],
-          analysisLogPath: path.join(logDir, "analysis.log"),
+          logDir,
         },
       }),
     };
 
     const providersSetup = await setupProviders(providerConfig);
 
+    if (!providersSetup.providers.analysis || !providersSetup.providers.diagnostics) {
+      throw new Error("Failed to initialize providers");
+    }
+
     // Step 2: Setup task manager
     logger.info("Setting up task manager");
-    const taskManager = new TaskManager(logger, providersSetup.providers);
+    const taskManager = new TaskManager(logger, [
+      providersSetup.providers.analysis,
+      providersSetup.providers.diagnostics,
+    ]);
 
     // Step 3: Setup Kai workflow manager
     logger.info("Setting up Kai workflow manager");

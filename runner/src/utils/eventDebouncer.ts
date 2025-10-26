@@ -78,31 +78,31 @@ export class EventDebouncer<TEvent> {
       const eventsToProcess = [...this.eventQueue];
       this.eventQueue = [];
 
-      this.logger.info("Processing batch of events", { eventCount: eventsToProcess.length });
+      this.logger.debug("Processing batch of events", { eventCount: eventsToProcess.length });
 
       let filteredEvents = eventsToProcess;
       if (this.config.filter) {
         filteredEvents = this.config.filter(eventsToProcess);
-        this.logger.info("Filtered relevant events", { eventCount: filteredEvents.length });
+        this.logger.silly("Filtered relevant events", { eventCount: filteredEvents.length });
       }
 
       if (this.config.deduplicate) {
         filteredEvents = this.config.deduplicate(filteredEvents);
-        this.logger.info("Deduplicated unique events", { eventCount: filteredEvents.length });
+        this.logger.silly("Deduplicated unique events", { eventCount: filteredEvents.length });
       }
 
       if (filteredEvents.length > 0) {
         await this.config.processor(filteredEvents);
-        this.logger.info("Successfully processed events", { eventCount: filteredEvents.length });
+        this.logger.debug("Successfully processed events", { eventCount: filteredEvents.length });
       } else {
-        this.logger.info("No events to process after filtering");
+        this.logger.debug("No events to process after filtering");
       }
     } catch (error) {
       this.logger.error("Error processing event batch", { error });
     } finally {
       this.isProcessing = false;
       if (this.eventQueue.length > 0) {
-        this.logger.info("New events queued during processing, scheduling next batch", {
+        this.logger.debug("New events queued during processing, scheduling next batch", {
           queueLength: this.eventQueue.length
         });
         this.scheduleProcessing();

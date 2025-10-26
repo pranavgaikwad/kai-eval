@@ -71,3 +71,7 @@ tests/test-data/**/.cache/
 tests/test-data/**/*.log
 tests/test-data/**/*.tmp
 tests/test-data/**/.DS_Store
+
+# E2E test data - coolstore project
+tests/test-data/coolstore/
+tests/test-data/logs/

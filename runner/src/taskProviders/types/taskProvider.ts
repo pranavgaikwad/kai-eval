@@ -1,3 +1,7 @@
+export interface TaskFactory<TData, TTask extends Task> {
+  createTask(data: TData, uri: string): TTask;
+}
+
 export interface Task {
   toString(): string;
   toJSON(): Record<string, string|number|boolean|undefined>;

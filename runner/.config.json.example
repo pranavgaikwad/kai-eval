@@ -15,7 +15,7 @@
   "jvmMaxMem": "4g",
 
   "kaiAnalyzerRpcPath": "/path/to/kai/analyzer/rpc/binary",
-  "rulesPath": ["/path/to/rule.yaml", "/path/to/rulesets/"],
+  "rulesPaths": ["/path/to/rule.yaml", "/path/to/rulesets/"],
   "targets": ["target1", "target2"],
   "sources": ["source1", "source2"],
 

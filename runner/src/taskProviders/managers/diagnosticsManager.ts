@@ -1,111 +1,61 @@
 import { Logger } from "winston";
 
-import { Diagnostic, PublishDiagnosticsParams } from "./lsp";
-import { Task } from "../types";
+import { Task, TaskFactory } from "../types/taskProvider";
 
-class DiagnosticTask implements Task {
-  constructor(private readonly d: Diagnostic) {}
+export class TasksStoreManager<TData, TTask extends Task> {
+  private readonly dataMap = new Map<string, TData[]>();
 
-  getID(): string {
-    return `${this.d.uri}:${this.d.message}:${this.d.severity}:${this.d.source}:${this.d.code?.toString() ?? ""}`;
+  constructor(
+    private readonly logger: Logger,
+    private readonly taskFactory: TaskFactory<TData, TTask>,
+    private readonly moduleName: string = 'TasksStoreManager'
+  ) {
+    this.logger = logger.child({ module: moduleName });
   }
 
-  toJSON(): Record<string, string|number|boolean|undefined> {
-    return {
-      id: this.getID(),
-      type: this.mapDiagnosticSeverity(this.d.severity),
-      category: "diagnostic",
-      description: this.d.message,
-      file: this.getUri(),
-      line: this.d.range.start.line + 1, // Convert to 1-based
-      column: this.d.range.start.character + 1, // Convert to 1-based
-      rule: this.d.code?.toString(),
-      source: this.d.source || "lsp",
-    };
-  }
-
-  toString(): string {
-    return JSON.stringify(this.toJSON());
-  }
-
-  getUri(): string {
-    return this.d.uri ? this.uriToPath(this.d.uri) : "";
-  }
-
-  private mapDiagnosticSeverity(severity?: number): string {
-    switch (severity) {
-      case 1: // DiagnosticSeverity.Error
-        return "error";
-      case 2: // DiagnosticSeverity.Warning
-        return "warning";
-      case 3: // DiagnosticSeverity.Information
-        return "info";
-      case 4: // DiagnosticSeverity.Hint
-        return "hint";
-      default:
-        return "info";
-    }
-  }
-
-  private uriToPath(uri: string): string {
-    if (uri.startsWith("file://")) {
-      return decodeURIComponent(uri.substring(7));
-    }
-    return uri;
-  }
-}
-
-export class DiagnosticsManager {
-  private readonly diagnosticsMap = new Map<string, Diagnostic[]>();
-
-  constructor(private readonly logger: Logger) {
-    this.logger = logger.child({ module: 'DiagnosticsManager' });
-  }
-
-  updateDiagnostics(params: PublishDiagnosticsParams): void {
-    this.logger.info("Received diagnostics", {
-      uri: params.uri,
-      issueCount: params.diagnostics.length
+  updateData(uri: string, data: TData[]): void {
+    this.logger.silly("Updating store with diagnostics data", {
+      uri,
+      itemCount: data.length
     });
 
-    if (params.diagnostics.length === 0) {
-      this.diagnosticsMap.delete(params.uri);
+    if (data.length === 0) {
+      this.dataMap.delete(uri);
     } else {
-      this.diagnosticsMap.set(params.uri, params.diagnostics);
+      this.dataMap.set(uri, data);
     }
   }
 
-  getAllTasks(): Task[] {
-    const tasks: Task[] = [];
+  getAllTasks(): TTask[] {
+    const tasks: TTask[] = [];
 
-    for (const [uri, diagnostics] of this.diagnosticsMap) {
-      for (const diagnostic of diagnostics) {
-        const diagnosticWithUri = { ...diagnostic, uri };
-        tasks.push(new DiagnosticTask(diagnosticWithUri));
+    for (const [uri, dataItems] of this.dataMap) {
+      for (const dataItem of dataItems) {
+        tasks.push(this.taskFactory.createTask(dataItem, uri));
       }
     }
 
     return tasks;
   }
 
-  getTasksForFile(uri: string): Task[] {
-    const diagnostics = this.diagnosticsMap.get(uri) || [];
-    return diagnostics.map((d) => new DiagnosticTask({ ...d, uri }));
+  getTasksForFile(uri: string): TTask[] {
+    const dataItems = this.dataMap.get(uri) || [];
+    return dataItems.map((item) => this.taskFactory.createTask(item, uri));
   }
 
-  clearAllDiagnostics(): void {
-    this.diagnosticsMap.clear();
+  clearAllData(): void {
+    this.dataMap.clear();
   }
 
-  getDiagnosticsCount(): number {
+  getDataCount(): number {
     let count = 0;
-    for (const diagnostics of this.diagnosticsMap.values()) {
-      count += diagnostics.length;
+    for (const dataItems of this.dataMap.values()) {
+      count += dataItems.length;
     }
     return count;
   }
 
-  getFilesWithDiagnostics(): string[] {
-    return Array.from(this.diagnosticsMap.keys());
+  getFilesWithData(): string[] {
+    return Array.from(this.dataMap.keys());
   }
 }

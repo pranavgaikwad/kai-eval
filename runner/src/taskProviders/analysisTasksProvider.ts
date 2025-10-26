@@ -1,11 +1,19 @@
 import { promises as fsPromises } from "fs";
-import { ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import os from "os";
+import path from "path";
 
+import { NotificationType, RequestType } from "vscode-jsonrpc/node";
 import { Logger } from "winston";
 
-import { Task, TaskProvider, BaseInitParams } from "./types";
+import { Task, TaskProvider, BaseInitParams } from "./types/taskProvider";
 import { EventDebouncer } from "../utils/eventDebouncer";
 import { FileWatchCapable, FileChangeEvent } from "../utils/fsWatch";
+import { TasksStoreManager } from "./managers/diagnosticsManager";
+import { ProcessManager } from "./managers/processManager";
+import { RPCConnectionManager } from "./managers/rpcConnectionManager";
+import { AnalysisTask, AnalysisTaskFactory } from "./tasks";
+import { AnalysisIncident, AnalysisRuleSet, TriggerAnalysisEvent } from "./types/analysis";
+
 
 export interface AnalyzerInitParams extends BaseInitParams {
   analyzerBinaryPath: string;
@@ -13,45 +21,107 @@ export interface AnalyzerInitParams extends BaseInitParams {
   sources: string[];
   rulesPaths: string[];
   pipePath: string;
-  analysisLogPath: string;
   excludedPaths: string[];
+  logDir: string;
 }
 
-// TODO (pgaikwad): remove this once we have a proper analyze params type
-interface _AnalyzeParams {
-  includedPaths: string[];
-  excludedPaths: string[];
-  labelSelector: string;
-  resetCache: boolean;
+// Analyzer RPC types
+interface StartParams {
+  type: string;
 }
+
+interface FileChange {
+  path: string;
+  content: string;
+  saved: boolean;
+}
+
+interface NotifyFileChangesParams {
+  changes: FileChange[];
+}
+
+interface AnalyzeParams {
+  label_selector: string;
+  included_paths?: string[];
+  excluded_paths: string[];
+  reset_cache: boolean;
+}
+
+interface AnalyzeResult {
+  Rulesets: AnalysisRuleSet[];
+}
+
+// RPC method definitions
+const StartNotification = new NotificationType<StartParams>("start");
+const NotifyFileChangesRequest = new RequestType<NotifyFileChangesParams, void, Error>("analysis_engine.NotifyFileChanges");
+const AnalyzeRequest = new RequestType<AnalyzeParams, AnalyzeResult, Error>("analysis_engine.Analyze");
+const ExecuteCommandRequest = new RequestType<unknown, unknown, Error>("workspace/executeCommand");
+
+export type AnalysisEvent = {
+  kind: "fileChange";
+  data: FileChangeEvent;
+} | {
+  kind: "triggerAnalysis";
+  data: TriggerAnalysisEvent;
+};
+
 
 export class AnalysisTasksProvider
   implements FileWatchCapable, TaskProvider<AnalyzerInitParams, void>
 {
-  private analyzerRPCServer: ChildProcessWithoutNullStreams | null = null;
-  private readonly debouncer: EventDebouncer<FileChangeEvent>;
+  private readonly processManager: ProcessManager;
+  private readonly connectionManager: RPCConnectionManager;
+  private readonly jdtlsConnectionManager: RPCConnectionManager;
+  private readonly debouncer: EventDebouncer<AnalysisEvent>;
+  private readonly analysisTasksManager: TasksStoreManager<AnalysisIncident, AnalysisTask>;
+  private initParams: AnalyzerInitParams | null = null;
+  private isServerRunning = false;
 
   constructor(private readonly logger: Logger) {
-    this.debouncer = new EventDebouncer(logger, {
+    this.processManager = new ProcessManager(logger);
+    this.connectionManager = new RPCConnectionManager(logger);
+    this.jdtlsConnectionManager = new RPCConnectionManager(logger.child({ module: 'JDTLSBridge' }));
+    this.analysisTasksManager = new TasksStoreManager(logger, new AnalysisTaskFactory(), 'AnalysisTasksStore');
+    
+    this.debouncer = new EventDebouncer<AnalysisEvent>(logger, {
       debounceMs: 3000,
       processor: this.runAnalysis.bind(this),
-      filter: this.filterRelevantFiles.bind(this),
-      deduplicate: this.deduplicateByPath.bind(this),
-    },
-  );
+      filter: this.filterAnalysisEvents.bind(this),
+      deduplicate: this.deduplicateAnalysisEvents.bind(this),
+    });
   }
 
   async init(params: AnalyzerInitParams): Promise<void> {
     await this.validateInitParams(params);
-    this.spawnAnalyzerProcess(params);
+    this.initParams = params;
+    await this.startAnalyzerServer();
+    // trigger an initial analysis
+    this.debouncer.addEvent({
+      kind: "triggerAnalysis",
+      data: {
+        includedPaths: [],
+        excludedPaths: [],
+        resetCache: true,
+        timestamp: new Date(),
+      } as TriggerAnalysisEvent,
+    });
   }
 
   async getCurrentTasks(): Promise<Task[]> {
-    await this.debouncer.waitUntilIdle();
-    return Promise.resolve([]);
+    await this.debouncer.waitUntilIdle(180000);
+    return this.analysisTasksManager.getAllTasks();
   }
 
-  async stop(): Promise<void> {}
+  async stop(): Promise<void> {
+    this.logger.info("Stopping analysis provider");
+
+    await this.connectionManager.disconnect();
+    await this.jdtlsConnectionManager.disconnect();
+    await this.processManager.terminate();
+
+    this.isServerRunning = false;
+    this.logger.info("Analysis provider stopped");
+  }
 
   private async validateInitParams(params: AnalyzerInitParams): Promise<void> {
     if (!params.analyzerBinaryPath) {
@@ -65,7 +135,7 @@ export class AnalysisTasksProvider
     } catch (error) {
       throw new Error(`Failed to validate analyzerBinaryPath: ${error}`);
     }
-    if (!params.workspacePaths) {
+    if (!params.workspacePaths || !params.workspacePaths.length) {
       throw new Error("workspacePaths is required");
     }
     for (const workspacePath of params.workspacePaths) {
@@ -86,7 +156,7 @@ export class AnalysisTasksProvider
     if (!params.sources) {
       throw new Error("sources is required");
     }
-    if (!params.rulesPaths) {
+    if (!params.rulesPaths.length) {
       throw new Error("rulesPaths is required");
     }
     for (const rulesPath of params.rulesPaths) {
@@ -99,82 +169,285 @@ export class AnalysisTasksProvider
     if (!params.pipePath) {
       throw new Error("pipePath is required");
     }
-    try {
-      const stat = await fsPromises.stat(params.pipePath);
-      if (!stat.isFile()) {
-        throw new Error("pipePath is not a file");
-      }
-    } catch (error) {
-      throw new Error(
-        `Failed to validate pipePath: ${params.pipePath}: ${error}`,
-      );
-    }
+    // try {
+    //   const stat = await fsPromises.stat(params.pipePath);
+    //   if (!stat.isFile()) {
+    //     throw new Error("pipePath is not a file");
+    //   }
+    // } catch (error) {
+    //   throw new Error(
+    //     `Failed to validate pipePath: ${params.pipePath}: ${error}`,
+    //   );
+    // }
   }
 
-  private spawnAnalyzerProcess(params: AnalyzerInitParams) {
-    const analyzerRpcServer = spawn(
-      params.analyzerBinaryPath,
+  private async startAnalyzerServer(): Promise<void> {
+    if (!this.initParams) {
+      throw new Error("Analysis provider not initialized");
+    }
+
+    const logDir = this.initParams.logDir || path.join(os.tmpdir(), "analysis-logs");
+    await fsPromises.mkdir(logDir, { recursive: true });
+    this.logger.info("Starting analyzer RPC server", { 
+      logDir,
+      pipePath: this.initParams.pipePath,
+      workspacePaths: this.initParams.workspacePaths,
+      rulesPaths: this.initParams.rulesPaths,
+      targets: this.initParams.targets,
+      sources: this.initParams.sources,
+      analyzerBinaryPath: this.initParams.analyzerBinaryPath }
+    );
+
+    const pipeName = ProcessManager.generatePipeName();
+
+    await this.processManager.spawn(
+      this.initParams.analyzerBinaryPath,
       [
         "-pipePath",
-        params.pipePath,
+        pipeName,
         "-rules",
-        params.rulesPaths.join(","),
+        this.initParams.rulesPaths.join(","),
         "-source-directory",
-        params.workspacePaths[0],
+        this.initParams.workspacePaths[0],
         "-log-file",
-        params.analysisLogPath,
+        path.join(logDir, "analysis.log"),
       ],
       {
-        cwd: params.workspacePaths[0],
-        env: process.env,
+        pipeName,
+        cwd: logDir,
+        onStderr: (data) => {
+          this.logger.error("Analyzer stderr", { data });
+        },
+        onExit: (code, signal) => {
+          this.logger.info("Analyzer process exited", { code, signal });
+          this.isServerRunning = false;
+        },
+        onError: (error) => {
+          this.logger.error("Analyzer process error", { error });
+          this.isServerRunning = false;
+        },
       },
     );
 
-    analyzerRpcServer.stderr.on("data", (_data) => {
-      // TODO (pgaikwad): handle this
+    if (!pipeName) {
+      throw new Error("Failed to create pipe for analyzer communication");
+    }
+
+    // connect to analyzer pipe
+    await (async () => {
+      const maxRetries = 3;
+      let lastError;
+      const tryConnect = async (attempt: number): Promise<void> => {
+        try {
+          await this.connectionManager.connectToPipe(pipeName);
+        } catch (error) {
+          lastError = error;
+          if (attempt >= maxRetries) {
+            throw new Error(`Failed to connect to analyzer pipe after ${maxRetries} attempts: ${error}`);
+          }
+          this.logger.warn(`connectToPipe to analyzer failed, attempt ${attempt}. Retrying after debounce...`);
+          await new Promise(resolve => setTimeout(resolve, 750 * attempt)); // debounced wait
+          return tryConnect(attempt + 1);
+        }
+      };
+      return tryConnect(1);
+    })();
+
+    // Set up RPC bridge to forward workspace/executeCommand requests to JDTLS
+    await this.setupJdtlsBridge();
+
+    await this.connectionManager.sendNotification(StartNotification, { type: "start" });
+
+    this.isServerRunning = true;
+    this.logger.info("Analyzer RPC server started successfully", { pipeName });
+  }
+
+  private async setupJdtlsBridge(): Promise<void> {
+    if (!this.initParams) {
+      throw new Error("Analysis provider not initialized");
+    }
+
+    this.logger.info("Setting up JDTLS bridge", { pipePath: this.initParams.pipePath });
+
+    // Connect to the JDTLS pipe
+    await this.jdtlsConnectionManager.connectToPipe(this.initParams.pipePath);
+
+    // Set up request handler for workspace/executeCommand from analyzer
+    // forward requests to JDTLS pipe
+    this.connectionManager.onRequest(ExecuteCommandRequest, async (params: any) => {
+      this.logger.silly("Forwarding workspace/executeCommand to JDTLS", {
+        command: params.command,
+        arguments: params.arguments
+      });
+
+      try {
+        const result = await this.jdtlsConnectionManager.sendRequest(ExecuteCommandRequest, params);
+        this.logger.silly("Received response from JDTLS", { result });
+        return result;
+      } catch (error) {
+        this.logger.error("Failed to forward workspace/executeCommand to JDTLS", { error, params });
+        throw error;
+      }
     });
 
-    analyzerRpcServer.on("exit", (_code, _signal) => {
-      this.analyzerRPCServer = null;
-      // TODO (pgaikwad): handle exit codes and signals here
-    });
-    analyzerRpcServer.on("close", (_code, _signal) => {
-      this.analyzerRPCServer = null;
-      // TODO (pgaikwad): handle close codes and signals here
-    });
-    analyzerRpcServer.on("error", (_err) => {
-      // TODO (pgaikwad): handle errors here
-      this.analyzerRPCServer = null;
-    });
-    this.analyzerRPCServer = analyzerRpcServer;
+    this.logger.info("JDTLS bridge setup completed");
   }
 
   isInitialized(): boolean {
-    return this.analyzerRPCServer !== null;
+    return this.isServerRunning && this.connectionManager.isConnected();
   }
 
   async onFileChange(event: FileChangeEvent): Promise<void> {
-    this.debouncer.addEvent(event);
+    this.debouncer.addEvent({
+      kind: "fileChange",
+      data: event,
+    });
   }
 
-  private async runAnalysis(events: FileChangeEvent[]): Promise<void> {
+  private async runAnalysis(events: AnalysisEvent[]): Promise<void> {
+    if (!this.isInitialized() || !this.initParams) {
+      this.logger.warn("Analysis provider not initialized, skipping analysis");
+      return;
+    }
+
     this.logger.info("AnalysisProvider running analysis for file changes", {
       changeCount: events.length
     });
-    events.forEach((event) => {
-      this.logger.info("File change event", {
-        type: event.type,
-        path: event.path,
-        timestamp: event.timestamp.toISOString()
+    const fileChanges = events.filter(
+      (event) => event.kind === "fileChange").map(
+        (event) => event.data as FileChangeEvent);
+    const triggerAnalysis = events.filter(
+      (event) => event.kind === "triggerAnalysis").map(
+        (event) => event.data as TriggerAnalysisEvent);
+    try {
+      if (triggerAnalysis?.length) {
+        if (fileChanges.length) {
+          await this.notifyFileChanges(fileChanges);
+        }
+        await this.performAnalysis([]);
+      } else if (fileChanges.length) {
+        await this.notifyFileChanges(fileChanges);
+        await this.performAnalysis(fileChanges);
+      }
+      this.logger.info("AnalysisProvider analysis completed successfully", {
+        changeCount: events.length
       });
-    });
-
-    this.logger.info("AnalysisProvider analysis completed", {
-      changeCount: events.length
-    });
+    } catch (error) {
+      this.logger.error("Analysis failed", { error, changeCount: events.length });
+    }
   }
 
-  private filterRelevantFiles(events: FileChangeEvent[]): FileChangeEvent[] {
+  private async notifyFileChanges(events: FileChangeEvent[]): Promise<void> {
+    const changes = events.map((event) => ({
+      path: event.path,
+      content: "",
+      saved: true,
+    }));
+
+    try {
+      await this.connectionManager.sendRequest(NotifyFileChangesRequest, {
+        changes: changes,
+      });
+      this.logger.debug("Notified analyzer of file changes", { changeCount: changes.length });
+    } catch (error) {
+      this.logger.error("Failed to notify file changes", { error });
+    }
+  }
+
+  private async performAnalysis(events: FileChangeEvent[]): Promise<void> {
+    if (!this.initParams) {
+      throw new Error("Analysis provider not initialized");
+    }
+
+    const labelSelector = this.buildLabelSelector();
+
+    const includedPaths = events.length > 0
+      ? events.map(event => event.path)
+      : undefined;
+
+    const analysisParams = {
+      label_selector: labelSelector,
+      included_paths: includedPaths,
+      reset_cache: !includedPaths, // Reset cache for full analysis
+      excluded_paths: this.initParams.excludedPaths || [],
+    };
+
+    this.logger.info("Sending analysis request", { params: analysisParams });
+
+    try {
+      const result = await this.connectionManager.sendRequest(AnalyzeRequest, analysisParams);
+      this.logger.info("Analysis completed");
+
+      const incidentsByUri = new Map<string, AnalysisIncident[]>();
+      for (const ruleSet of result.Rulesets) {
+        if (ruleSet.violations) {
+          for (const [ruleName, violation] of Object.entries(ruleSet.violations)) {
+            if (violation.incidents) {
+              for (const incident of violation.incidents) {
+                const uri = incident.uri;
+                if (!incidentsByUri.has(uri)) {
+                  incidentsByUri.set(uri, []);
+                }
+                const enhancedIncident: AnalysisIncident = {
+                  ...incident,
+                  ruleSet: ruleSet.name,
+                  rule: ruleName,
+                  category: violation.category || incident.category,
+                  description: violation.description,
+                };
+                incidentsByUri.get(uri)!.push(enhancedIncident);
+              }
+            }
+          }
+        }
+      }
+      this.logger.debug("Updating analysis tasks", {
+        totalUris: incidentsByUri.size,
+        totalIncidents: Array.from(incidentsByUri.values()).reduce((acc, incidents) => acc + incidents.length, 0)
+      });
+
+      // Clear all data once before updating with new analysis results
+      this.analysisTasksManager.clearAllData();
+
+      for (const [uri, incidents] of incidentsByUri) {
+        this.analysisTasksManager.updateData(uri, incidents);
+      }
+      const formattedDate = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+      await this.writeAnalysisResult(
+        result, 
+        path.join(this.initParams.logDir, `analysis_${formattedDate}.json`)
+      );
+    } catch (error) {
+      this.logger.error("Analysis request failed", { error });
+      throw error;
+    }
+  }
+
+  private async writeAnalysisResult(result: AnalyzeResult, path: string): Promise<void> {
+    try {
+      await fsPromises.writeFile(path, JSON.stringify(result, null, 2), "utf-8");
+    } catch (error) {
+      this.logger.error("Failed to write analysis result to file", { error, path });
+      throw error;
+    }
+  }
+
+  private buildLabelSelector(): string {
+    if (!this.initParams) {
+      throw new Error("Analysis provider not initialized");
+    }
+    const targets = this.initParams.targets.map(target => `konveyor.io/target=${target}`).join(" || ");
+    const sources = this.initParams.sources.map(source => `konveyor.io/source=${source}`).join(" || ");
+    return `${targets} ${sources ? `&& ${sources}` : ""}`;
+  }
+
+  private filterAnalysisEvents(events: AnalysisEvent[]): AnalysisEvent[] {
+    const fileChanges = events.filter(
+      (event) => event.kind === "fileChange").map(
+        (event) => event);
+    const triggerAnalysis = events.filter(
+      (event) => event.kind === "triggerAnalysis").map((event) => event)
+      .sort((a, b) => b.data.timestamp.getTime() - a.data.timestamp.getTime());
     const relevantExtensions = [
       ".java",
       ".xml",
@@ -184,27 +457,39 @@ export class AnalysisTasksProvider
       ".json",
       ".yaml",
     ];
-
-    return events.filter((event) => {
+    const filteredEvents: AnalysisEvent[] = [];
+    
+    filteredEvents.push(...fileChanges.filter((event) => {
       const hasRelevantExtension = relevantExtensions.some((ext) =>
-        event.path.toLowerCase().endsWith(ext),
+        event.data.path.toLowerCase().endsWith(ext),
       );
 
       // Also include if it's a build file
-      const isBuildFile = event.path.match(
+      const isBuildFile = event.data.path.match(
         /\/(pom\.xml|build\.gradle|gradle\.properties)$/,
       );
 
       return hasRelevantExtension || isBuildFile;
-    });
+    }));
+    if (triggerAnalysis.length) {
+      // Only keep the most recent trigger analysis event
+      filteredEvents.push(triggerAnalysis[0]);
+    }
+    
+    return filteredEvents;
   }
 
-  private deduplicateByPath(events: FileChangeEvent[]): FileChangeEvent[] {
-    const eventMap = new Map<string, FileChangeEvent>();
+  private deduplicateAnalysisEvents(events: AnalysisEvent[]): AnalysisEvent[] {
+    const eventMap = new Map<string, AnalysisEvent>();
     events.forEach((event) => {
-      const existing = eventMap.get(event.path);
-      if (!existing || event.timestamp > existing.timestamp) {
-        eventMap.set(event.path, event);
+      if (event.kind === "fileChange") {
+        const existing = eventMap.get(event.data.path);
+        if (!existing || event.data.timestamp > existing.data.timestamp) {
+          eventMap.set(event.data.path, event);
+        }
+      }
+      if (event.kind === "triggerAnalysis") {
+        eventMap.set("___triggerAnalysis___", event);
       }
     });
     return Array.from(eventMap.values());
