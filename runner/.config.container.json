@@ -1,5 +1,8 @@
 {
-  "logLevel": "info",
+  "logLevel": {
+    "console": "info",
+    "file": "silly"
+  },
   "logDir": "/logs",
   "workspacePaths": ["/workspace"],
   "modelProvider": "ChatOpenAI",

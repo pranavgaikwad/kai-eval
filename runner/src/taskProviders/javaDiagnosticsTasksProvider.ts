@@ -40,9 +40,12 @@ export class JavaDiagnosticsTasksProvider
   private diagnosticsUpdatePromise?: { resolve: () => void; timeout: NodeJS.Timeout };
 
   constructor(private readonly logger: Logger) {
-    this.connectionManager = new RPCConnectionManager(logger);
-    this.diagnosticsManager = new TasksStoreManager(logger, new DiagnosticTaskFactory(), 'DiagnosticsManager');
-    this.processManager = new ProcessManager(logger);
+    this.connectionManager = new RPCConnectionManager(
+      logger.child({ module: 'JavaLSPConnectionManager' }));
+    this.diagnosticsManager = new TasksStoreManager(
+      logger.child({ module: "JavaDiagnosticsStore" }), new DiagnosticTaskFactory());
+    this.processManager = new ProcessManager(
+      logger.child({ module: 'JdtlsProcessManager' }));
     this.logger = logger.child({ module: 'JavaDiagnosticsTasksProvider' });
 
     this.debouncer = new EventDebouncer(this.logger, {

@@ -2,13 +2,13 @@ ARG NODE_VERSION=20
 ARG JAVA_VERSION=21
 ARG MAVEN_VERSION=3.9.11
 ARG KAI_VERSION=v0.8.0-beta.4
-ARG TARGETPLATFORM
+ARG TARGETPLATFORM=linux/amd64
 
 FROM quay.io/konveyor/jdtls-server-base:latest AS jdtls-source
 
 FROM registry.access.redhat.com/ubi9/ubi AS rulesets-download
 ARG KAI_VERSION
-ARG TARGETPLATFORM
+ARG TARGETPLATFORM=linux/amd64
 RUN dnf install -y git curl && dnf clean all && rm -rf /var/cache/dnf
 WORKDIR /rules
 RUN git clone https://github.com/konveyor/rulesets.git .

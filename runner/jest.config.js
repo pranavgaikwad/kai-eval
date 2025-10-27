@@ -12,6 +12,7 @@ export default {
   },
   testEnvironment: 'node',
   testMatch: ['**/tests/**/*.test.ts'],
+  testPathIgnorePatterns: ['/vendor/'],
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',

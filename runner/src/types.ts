@@ -2,7 +2,10 @@ import { SupportedModelProviders } from "./kai/modelProvider";
 
 export interface KaiRunnerConfig {
   // Logging
-  logLevel?: string;
+  logLevel?: { 
+    console: string; 
+    file: string; 
+  };
   logDir?: string;
 
   // Workspace
@@ -25,5 +28,4 @@ export interface KaiRunnerConfig {
 
   // Kai Workflow
   solutionServerUrl?: string;
-  traceDir?: string;
 }

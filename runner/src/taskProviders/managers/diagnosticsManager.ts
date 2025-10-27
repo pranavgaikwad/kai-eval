@@ -8,9 +8,7 @@ export class TasksStoreManager<TData, TTask extends Task> {
   constructor(
     private readonly logger: Logger,
     private readonly taskFactory: TaskFactory<TData, TTask>,
-    private readonly moduleName: string = 'TasksStoreManager'
   ) {
-    this.logger = logger.child({ module: moduleName });
   }
 
   updateData(uri: string, data: TData[]): void {

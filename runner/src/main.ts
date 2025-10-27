@@ -1,18 +1,11 @@
 #!/usr/bin/env node
 
-import * as os from "os";
-import * as path from "path";
-
 import { program } from "commander";
-import { createLogger, transports } from "winston";
 
 import { SupportedModelProviders } from "./kai/modelProvider";
-import { setupKai, KaiSetupConfig } from "./setupKai";
-import { setupProviders, TaskProviderSetupConfig } from "./setupProviders";
-import { TaskManager } from "./taskManager/taskManager";
+import { setupKaiRunner } from "./setup/kaiRunner";
 import { KaiRunnerConfig } from "./types";
 import { loadConfig, loadEnv } from "./utils/config";
-import { orderedJsonFormat } from "./utils/logger";
 
 
 async function main(): Promise<void> {
@@ -44,7 +37,11 @@ async function main(): Promise<void> {
     const env = loadEnv();
 
     const cliConfig: KaiRunnerConfig = {
-      logLevel: options.logLevel,
+      logLevel: {
+        ...options.logLevel,
+        console: options.logLevel?.console || "info",
+        file: options.logLevel?.file || "debug",
+      },
       logDir: options.logDir,
       workspacePaths: options.workspacePaths?.split(","),
       modelProvider: options.modelProvider as SupportedModelProviders,
@@ -60,94 +57,20 @@ async function main(): Promise<void> {
 
     const finalConfig = mergeConfig(jsonConfig, cliConfig);
 
-    if (!finalConfig.workspacePaths || finalConfig.workspacePaths.length === 0) {
-      throw new Error("workspacePaths must be provided either in config file or via --workspace-paths");
-    }
-
-    // TODO (pgaikwad): re-visit when adding multi-workspace support
-    const workspaceDir = finalConfig.workspacePaths[0];
-
-    const logDir = finalConfig.logDir || path.join(os.tmpdir(), `kai-runner-logs-${Date.now()}`);
-
-    const logger = createLogger({
-      level: finalConfig.logLevel || "info",
-      format: orderedJsonFormat,
-      transports: [
-        new transports.File({
-          filename: path.join(logDir, "kai-runner.log"),
-        }),
-        new transports.Console(),
-      ],
-    });
-
-    logger.info("Starting Kai runner", { config: finalConfig });
-    logger.info("Setting up task providers");
-    const providerConfig: TaskProviderSetupConfig = {
-      workspacePaths: finalConfig.workspacePaths,
-      logger,
-      ...(finalConfig.jdtlsBinaryPath && {
-        diagnosticsParams: {
-          jdtlsBinaryPath: finalConfig.jdtlsBinaryPath,
-          jdtlsBundles: finalConfig.jdtlsBundles || [],
-          jvmMaxMem: finalConfig.jvmMaxMem,
-          logDir,
-        },
-      }),
-      ...(finalConfig.kaiAnalyzerRpcPath && {
-        analysisParams: {
-          analyzerBinaryPath: finalConfig.kaiAnalyzerRpcPath,
-          rulesPaths: finalConfig.rulesPaths || [],
-          targets: finalConfig.targets || [],
-          sources: finalConfig.sources || [],
-          logDir,
-        },
-      }),
-    };
-
-    const providersSetup = await setupProviders(providerConfig);
-
-    if (!providersSetup.providers.analysis || !providersSetup.providers.diagnostics) {
-      throw new Error("Failed to initialize providers");
-    }
-
-    // Step 2: Setup task manager
-    logger.info("Setting up task manager");
-    const taskManager = new TaskManager(logger, [
-      providersSetup.providers.analysis,
-      providersSetup.providers.diagnostics,
-    ]);
-
-    // Step 3: Setup Kai workflow manager
-    logger.info("Setting up Kai workflow manager");
-
-    if (!finalConfig.modelProvider) {
-      throw new Error("modelProvider must be specified in config or via --model-provider");
-    }
-
-    const kaiConfig: KaiSetupConfig = {
-      workspaceDir,
-      logger,
-      taskManager,
-      modelConfig: {
-        provider: finalConfig.modelProvider,
-        args: finalConfig.modelArgs || {},
-      },
-      env,
-      solutionServerUrl: finalConfig.solutionServerUrl,
-      traceDir: path.join(logDir, "traces"),
-    };
-
-    const kaiSetup = await setupKai(kaiConfig);
-
-    logger.info("Kai runner setup complete");
+    // TODO (pgaikwad): pass the right incidents
+    // Setup Kai runner with merged configuration
+    const kaiRunnerSetup = await setupKaiRunner(finalConfig, {
+      incidents: [],
+      programmingLanguage: "Java",
+      migrationHint: "",
+      enableAgentMode: false,
+    }, env);
+    const { logger, shutdown: kaiShutdown } = kaiRunnerSetup;
 
     // Setup graceful shutdown
     const shutdown = async () => {
-      logger.info("Shutting down Kai runner");
       try {
-        await kaiSetup.shutdown();
-        await providersSetup.shutdown();
-        logger.info("Kai runner shutdown complete");
+        await kaiShutdown();
         process.exit(0);
       } catch (error) {
         logger.error("Error during shutdown", { error });

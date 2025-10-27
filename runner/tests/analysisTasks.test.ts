@@ -4,7 +4,7 @@ import { execSync } from "child_process";
 
 import { Logger } from "winston";
 
-import { setupProviders, TaskProviderSetupConfig } from "../src/setupProviders";
+import { setupProviders, TaskProviderSetupConfig } from "../src/setup/providers";
 import { createOrderedLogger } from "../src/utils/logger";
 import { getConfig } from "../src/utils/config";
 
@@ -18,10 +18,16 @@ describe("AnalysisTasksProvider E2E Tests", () => {
     const { config, env } = await getConfig({
       workingDir: path.resolve(__dirname, ".."),
     });
-
-    logger = createOrderedLogger(config.logLevel || "error");
-
     testDataPath = path.resolve(__dirname, "test-data");
+
+    const logDir = path.join(testDataPath, "logs");
+
+    logger = createOrderedLogger(
+      config.logLevel?.console || "error",
+      config.logLevel?.file || "silly",
+      path.join(logDir, "analysis-tasks-test.log")
+    );
+
     coolstoreProjectPath = path.join(testDataPath, "coolstore");
 
     try {
@@ -51,7 +57,7 @@ describe("AnalysisTasksProvider E2E Tests", () => {
           jdtlsBinaryPath: config.jdtlsBinaryPath,
           jdtlsBundles: config.jdtlsBundles || [],
           jvmMaxMem: config.jvmMaxMem,
-          logDir: path.join(testDataPath, "logs"),
+          logDir,
         },
       }),
       ...(config.kaiAnalyzerRpcPath && {
@@ -60,7 +66,7 @@ describe("AnalysisTasksProvider E2E Tests", () => {
           rulesPaths: config.rulesPaths || [],
           targets: ["quarkus", "jakarta-ee", "cloud-readiness"],
           sources: [],
-          logDir: path.join(testDataPath, "logs"),
+          logDir,
         },
       }),
     };

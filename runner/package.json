@@ -20,13 +20,13 @@
   },
   "scripts": {
     "clean": "rimraf dist",
-    "ci": "npx jest",
+    "ci": "npm run lint && npm test",
     "test": "jest",
     "lint": "eslint src",
     "lint:fix": "eslint --fix src",
     "format": "eslint --fix .",
     "build-deps": "./scripts/build-deps.sh",
-    "prebuild": "npm run clean",
+    "prebuild": "npm run clean && npm run build-deps",
     "build": "tsup src/index.ts src/main.ts --dts --format esm,cjs --out-dir dist --clean",
     "dev": "tsup src/index.ts --dts --format esm,cjs --out-dir dist --watch"
   },

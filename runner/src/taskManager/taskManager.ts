@@ -15,6 +15,7 @@ export class TaskManager {
     if (provider) {
       this.providers = [...provider];
     }
+    this.logger = logger.child({ module: "TaskManager" });
   }
 
   async getTasks(): Promise<TaskSnapshotDiff> {

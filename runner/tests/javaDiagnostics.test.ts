@@ -15,11 +15,17 @@ describe('JavaDiagnosticsTasksProvider Tests', () => {
       workingDir: path.resolve(__dirname, '..'),
     });
 
-    logger = createOrderedLogger(config.logLevel || env.LOG_LEVEL || 'error');
+    const testDataPath = path.resolve(__dirname, 'test-data');
+    const logDir = path.join(testDataPath, "logs");
+    logger = createOrderedLogger(
+      config.logLevel?.console || 'error',
+      config.logLevel?.file || 'silly',
+      path.join(logDir, "java-diagnostics-test.log")
+    );
     provider = new JavaDiagnosticsTasksProvider(logger);
 
     const jdtBinaryPath = config.jdtlsBinaryPath || env.JDTLS_BINARY_PATH || "";
-    const testJavaProjectPath = path.resolve(__dirname, 'test-data/java');
+    const testJavaProjectPath = path.join(testDataPath, 'java');
     const workspacePaths = [testJavaProjectPath];
     const bundles = config.jdtlsBundles || env.JDTLS_BUNDLES?.split(',') || [];
     const jvmMaxMem = config.jvmMaxMem || env.JVM_MAX_MEM;
@@ -29,6 +35,7 @@ describe('JavaDiagnosticsTasksProvider Tests', () => {
       workspacePaths,
       jdtlsBundles: bundles,
       jvmMaxMem,
+      logDir,
     };
 
     await provider.init(initParams);

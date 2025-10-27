@@ -5,23 +5,23 @@ import {
 } from "@editor-extensions/agentic";
 import { Logger } from "winston";
 
-import { KaiWorkflowManager, KaiWorkflowManagerOptions } from "./kai/kaiWorkflowManager";
-import { createModelProvider, SupportedModelProviders } from "./kai/modelProvider";
-import { TaskManager } from "./taskManager/taskManager";
+import { KaiWorkflowManager, KaiWorkflowManagerOptions } from "../kai/kaiWorkflowManager";
+import { createModelProvider, SupportedModelProviders } from "../kai/modelProvider";
+import { TaskManager } from "../taskManager";
 
-export interface ModelConfig {
+interface ModelConfig {
   provider: SupportedModelProviders;
   args: Record<string, unknown>;
 }
 
-export interface KaiSetupConfig {
+export interface KaiWorkflowSetupConfig {
   workspaceDir: string;
   logger: Logger;
   taskManager: TaskManager;
   modelConfig?: ModelConfig;
   env?: Record<string, string>;
   solutionServerUrl?: string;
-  traceDir?: string;
+  logDir: string;
 }
 
 
@@ -30,7 +30,7 @@ export interface KaiSetupResult {
   shutdown: () => Promise<void>;
 }
 
-export async function setupKai(config: KaiSetupConfig): Promise<KaiSetupResult> {
+export async function setupKaiWorkflow(config: KaiWorkflowSetupConfig): Promise<KaiSetupResult> {
   const logger = config.logger.child({ module: "KaiSetup" });
   logger.info("Setting up Kai workflow system");
 
@@ -73,7 +73,7 @@ export async function setupKai(config: KaiSetupConfig): Promise<KaiSetupResult> 
     const kaiWorkflowManager = new KaiWorkflowManager(
       logger,
       config.taskManager,
-      config.traceDir
+      config.logDir
     );
 
     const workflowOptions: KaiWorkflowManagerOptions = {

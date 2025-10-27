@@ -44,15 +44,16 @@ export class KaiWorkflowManager {
     id: "<unknown>",
   });
   private buffer: AIMessageChunk = this.defaultBuffer;
-  private totalMessages: number = 0;
+  private traceDir: string;
 
   constructor(
     private readonly logger: Logger,
     private readonly taskManager: TaskManager,
-    private readonly traceDir: string = path.join(os.tmpdir(), `kai-workflow-trace-${Date.now()}`)
+    private readonly logDir: string = path.join(os.tmpdir(), `kai-workflow-trace-${Date.now()}`)
   ) {
     this.logger = logger.child({ module: "KaiWorkflowManager" });
     this.workflow = new KaiInteractiveWorkflow(this.logger);
+    this.traceDir = path.join(logDir, "traces");
   }
 
   async init(options: KaiWorkflowManagerOptions): Promise<void> {
@@ -128,13 +129,13 @@ export class KaiWorkflowManager {
         } else if (this.buffer.id === chunk.id) {
           this.buffer = this.buffer.concat(chunk);
         } else {
-          await this.writeMessageToTrace(this.buffer, ++this.totalMessages);
+          await this.writeMessageToTrace(this.buffer);
           this.buffer = chunk;
         }
         break;
       }
       case KaiWorkflowMessageType.LLMResponse:
-        await this.writeMessageToTrace(message.data as AIMessage, ++this.totalMessages);
+        await this.writeMessageToTrace(message.data as AIMessage);
         break;
       case KaiWorkflowMessageType.ModifiedFile:
         this.handleModifiedFile(message);
@@ -217,9 +218,9 @@ export class KaiWorkflowManager {
     return resolvedPath;
   }
 
-  private async writeMessageToTrace(message: AIMessage, fileCounter: number): Promise<void> {
+  private async writeMessageToTrace(message: AIMessage): Promise<void> {
     try {
-      const filepath = path.join(this.traceDir, `llm_responses_${fileCounter}.txt`);
+      const filepath = path.join(this.traceDir, `llm_responses.txt`);
       await fs.appendFile(filepath, `${JSON.stringify(message.toJSON(), null, 2)}\n`);
     } catch (error) {
       this.logger.warn("Failed to write message trace", { error, messageId: message.id });
@@ -238,6 +239,7 @@ export class KaiWorkflowManager {
       case "choice":
         interaction.response = {
           ...interaction.response,
+          yesNo: true,
           choice: 0, // always select the first option
         };
         break;
@@ -251,6 +253,7 @@ export class KaiWorkflowManager {
 
           interaction.response = {
             ...interaction.response,
+            yesNo: true,
             tasks: filteredTasks
           };
         } catch (error) {

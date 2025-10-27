@@ -78,11 +78,16 @@ export class AnalysisTasksProvider
   private isServerRunning = false;
 
   constructor(private readonly logger: Logger) {
-    this.processManager = new ProcessManager(logger);
-    this.connectionManager = new RPCConnectionManager(logger);
-    this.jdtlsConnectionManager = new RPCConnectionManager(logger.child({ module: 'JDTLSBridge' }));
-    this.analysisTasksManager = new TasksStoreManager(logger, new AnalysisTaskFactory(), 'AnalysisTasksStore');
-    
+    this.processManager = new ProcessManager(
+      logger.child({ module: 'AnalysisProcessManager' }));
+    this.connectionManager = new RPCConnectionManager(
+      logger.child({ module: 'AnalysisRPCConnectionManager' }));
+    this.jdtlsConnectionManager = new RPCConnectionManager(
+      logger.child({ module: 'JDTLSBridge' }));
+    this.analysisTasksManager = new TasksStoreManager(
+      logger.child({ module: "AnalysisTasksStore" }), new AnalysisTaskFactory());
+    this.logger = logger.child({ module: "AnalysisTasksProvider" });
+
     this.debouncer = new EventDebouncer<AnalysisEvent>(logger, {
       debounceMs: 3000,
       processor: this.runAnalysis.bind(this),
@@ -236,12 +241,10 @@ export class AnalysisTasksProvider
     // connect to analyzer pipe
     await (async () => {
       const maxRetries = 3;
-      let lastError;
       const tryConnect = async (attempt: number): Promise<void> => {
         try {
           await this.connectionManager.connectToPipe(pipeName);
         } catch (error) {
-          lastError = error;
           if (attempt >= maxRetries) {
             throw new Error(`Failed to connect to analyzer pipe after ${maxRetries} attempts: ${error}`);
           }
@@ -274,11 +277,8 @@ export class AnalysisTasksProvider
 
     // Set up request handler for workspace/executeCommand from analyzer
     // forward requests to JDTLS pipe
-    this.connectionManager.onRequest(ExecuteCommandRequest, async (params: any) => {
-      this.logger.silly("Forwarding workspace/executeCommand to JDTLS", {
-        command: params.command,
-        arguments: params.arguments
-      });
+    this.connectionManager.onRequest(ExecuteCommandRequest, async (params: unknown) => {
+      this.logger.silly("Forwarding workspace/executeCommand to JDTLS", params);
 
       try {
         const result = await this.jdtlsConnectionManager.sendRequest(ExecuteCommandRequest, params);

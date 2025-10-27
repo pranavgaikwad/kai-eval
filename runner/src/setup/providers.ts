@@ -7,9 +7,9 @@ import {
   JavaDiagnosticsInitParams,
   JavaDiagnosticsInitResult,
   TaskProvider,
-} from "./taskProviders";
-import { FileWatchCapable, SharedFileWatcher } from "./utils/fsWatch";
-import { getExcludedPaths } from "./utils/paths";
+} from "../taskProviders";
+import { FileWatchCapable, SharedFileWatcher } from "../utils/fsWatch";
+import { getExcludedPaths } from "../utils/paths";
 
 export interface TaskProviderSetupConfig {
   workspacePaths: string[];

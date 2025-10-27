@@ -1,5 +1,8 @@
 {
-  "logLevel": "info",
+  "logLevel": {
+    "console": "info",
+    "file": "silly"
+  },
   "logDir": "./logs",
 
   "workspacePaths": ["/path/to/your/workspace"],
@@ -10,14 +13,14 @@
     "temperature": 0.1
   },
 
-  "jdtlsBinaryPath": "/path/to/jdtls/bin/jdtls",
-  "jdtlsBundles": ["/path/to/bundle.jar"],
+  "jdtlsBinaryPath": "./vendor/jdtls/bin/jdtls",
+  "jdtlsBundles": ["./vendor/jdtls/java-analyzer-bundle/java-analyzer-bundle.core/target/java-analyzer-bundle.core-1.0.0-SNAPSHOT.jar"],
   "jvmMaxMem": "4g",
 
-  "kaiAnalyzerRpcPath": "/path/to/kai/analyzer/rpc/binary",
-  "rulesPaths": ["/path/to/rule.yaml", "/path/to/rulesets/"],
-  "targets": ["target1", "target2"],
-  "sources": ["source1", "source2"],
+  "kaiAnalyzerRpcPath": "./vendor/analyzer/kai_analyzer_rpc",
+  "rulesPaths": ["./vendor/rulesets"],
+  "targets": ["quarkus", "cloud-readiness"],
+  "sources": [],
 
-  "solutionServerUrl": "http://localhost:8080",
+  "solutionServerUrl": "http://localhost:8080"
 }
