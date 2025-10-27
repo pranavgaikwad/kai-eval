@@ -1,13 +1,12 @@
 #!/bin/bash
-set -e
 
+set -e
 VENDOR_DIR="./vendor"
 KAI_VERSION="v0.8.0-beta.4"
 
 mkdir -p "$VENDOR_DIR"
 
-echo "Setting up dependencies in $VENDOR_DIR..."
-echo "Using Kai version: $KAI_VERSION"
+echo "Using Kai version ${KAI_VERSION}"
 
 detect_platform() {
     case "$(uname -s)" in
@@ -31,62 +30,8 @@ detect_platform() {
             echo "Unsupported operating system: $(uname -s)" && exit 1 ;;
     esac
 }
+
 source .env || true
-echo "Setting up Editor Extensions (Agentic)..."
-if [ -n "$PATH_EDITOR_EXTENSIONS" ] && [ -d "$PATH_EDITOR_EXTENSIONS" ]; then
-    echo "Using local editor-extensions from: $PATH_EDITOR_EXTENSIONS"
-    AGENTIC_DIR="$PATH_EDITOR_EXTENSIONS/agentic"
-
-    if [ ! -d "$AGENTIC_DIR" ]; then
-        echo "Error: Agentic directory not found at $AGENTIC_DIR"
-        exit 1
-    fi
-
-    echo "Building agentic from local path..."
-    cd "$AGENTIC_DIR"
-    npm install
-    npm run build
-    npm pack
-
-    TARBALL=$(ls editor-extensions-agentic-*.tgz 2>/dev/null | head -n 1)
-    if [ -z "$TARBALL" ]; then
-        echo "Error: No tarball found"
-        exit 1
-    fi
-
-    cd - > /dev/null
-    mv "$AGENTIC_DIR/$TARBALL" "$VENDOR_DIR/"
-    echo "Agentic dependency built and packaged: $VENDOR_DIR/$TARBALL"
-
-else
-    echo "Downloading editor-extensions from GitHub..."
-    EDITOR_EXT_DIR="$VENDOR_DIR/editor-extensions"
-
-    if [ -d "$EDITOR_EXT_DIR" ]; then
-        echo "Removing existing editor-extensions..."
-        rm -rf "$EDITOR_EXT_DIR"
-    fi
-
-    git clone https://github.com/konveyor/editor-extensions.git "$EDITOR_EXT_DIR"
-    echo "Editor-extensions cloned to $EDITOR_EXT_DIR"
-
-    echo "Building agentic from downloaded repository..."
-    pushd "$EDITOR_EXT_DIR"
-    npm install
-    cd agentic
-    npm install
-    npm run build
-    npm pack
-    TARBALL=$(ls editor-extensions-agentic-*.tgz 2>/dev/null | head -n 1)
-    if [ -z "$TARBALL" ]; then
-        echo "❌ Error: No tarball found"
-        exit 1
-    fi
-    popd
-    mv "$EDITOR_EXT_DIR/agentic/$TARBALL" "$VENDOR_DIR/"
-    rm -rf "$EDITOR_EXT_DIR"
-    echo "Agentic dependency built and packaged: $VENDOR_DIR/$TARBALL"
-fi
 
 echo "Setting up Rulesets..."
 RULESETS_DIR="$VENDOR_DIR/rulesets"
@@ -98,7 +43,6 @@ echo "Downloading rulesets from GitHub..."
 git clone https://github.com/konveyor/rulesets.git "$RULESETS_DIR"
 echo "Rulesets cloned to $RULESETS_DIR"
 
-# 3. Download Kai Analyzer RPC Binary
 echo "Setting up Kai Analyzer RPC..."
 PLATFORM=$(detect_platform)
 ANALYZER_BINARY="kai-analyzer-rpc-${PLATFORM}"
@@ -116,7 +60,6 @@ curl -fsSL -o "$ANALYZER_DIR/kai_analyzer_rpc" "$KAI_ANALYZER_URL"
 chmod +x "$ANALYZER_DIR/kai_analyzer_rpc"
 echo "Kai Analyzer RPC downloaded to $ANALYZER_DIR/kai_analyzer_rpc"
 
-# 4. Download JDTLS
 echo "Setting up JDTLS..."
 JDTLS_DIR="$VENDOR_DIR/jdtls"
 if [ -d "$JDTLS_DIR" ]; then

@@ -1,9 +1,7 @@
 import * as crypto from "crypto";
 
-import { Diagnostic } from "./types/lsp";
-import { Task, TaskFactory } from "./types/taskProvider";
+import { Task, TaskFactory, AnalysisIncident, Diagnostic } from "./types";
 import { fileUriToPath } from "../utils/paths";
-import { AnalysisIncident } from "./types/analysis";
 
 export class DiagnosticTask implements Task {
   constructor(private readonly diagnostic: Diagnostic & { uri: string }) {}
@@ -27,7 +25,7 @@ export class DiagnosticTask implements Task {
   }
 
   toString(): string {
-    return JSON.stringify(this.toJSON());
+    return this.diagnostic.message;
   }
 
   getUri(): string {
@@ -57,22 +55,24 @@ export class DiagnosticTask implements Task {
   }
 }
 
-export class DiagnosticTaskFactory implements TaskFactory<Diagnostic, DiagnosticTask> {
+export class DiagnosticTaskFactory
+  implements TaskFactory<Diagnostic, DiagnosticTask>
+{
   createTask(diagnostic: Diagnostic, uri: string): DiagnosticTask {
     return new DiagnosticTask({ ...diagnostic, uri });
   }
 }
 
-export class AnalysisTaskFactory implements TaskFactory<AnalysisIncident, AnalysisTask> {
+export class AnalysisTaskFactory
+  implements TaskFactory<AnalysisIncident, AnalysisTask>
+{
   createTask(incident: AnalysisIncident, _uri: string): AnalysisTask {
     return new AnalysisTask(incident);
   }
 }
 
 export class AnalysisTask implements Task {
-  constructor(
-    private readonly incident: AnalysisIncident,
-  ) {}
+  constructor(private readonly incident: AnalysisIncident) {}
 
   getID(): string {
     const data = `${this.incident.uri}:${this.incident.ruleSet}:${this.incident.rule}:${this.incident.category}:${this.incident.message}:${this.incident.lineNumber || 0}`;
@@ -84,7 +84,7 @@ export class AnalysisTask implements Task {
   }
 
   toString(): string {
-    return JSON.stringify(this.toJSON());
+    return `${this.incident.description} - ${this.incident.message}`;
   }
 
   toJSON(): Record<string, string | number | boolean | undefined> {
@@ -103,5 +103,9 @@ export class AnalysisTask implements Task {
       effort: this.incident.effort,
       links: this.incident.links?.join(","),
     };
+  }
+
+  getIncident(): AnalysisIncident {
+    return this.incident;
   }
 }

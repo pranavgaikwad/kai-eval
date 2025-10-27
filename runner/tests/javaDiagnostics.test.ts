@@ -4,7 +4,7 @@ import { Logger } from 'winston';
 import { createOrderedLogger } from '../src/utils/logger';
 import { getConfig } from '../src/utils/config';
 
-describe('JavaDiagnosticsTasksProvider Tests', () => {
+describe('JavaDiagnosticsTasksProvider Integration Tests', () => {
   let provider: JavaDiagnosticsTasksProvider;
   let logger: Logger;
 

@@ -1,10 +1,10 @@
-import { SupportedModelProviders } from "./kai/modelProvider";
+import { SupportedModelProviders } from "./kai";
 
 export interface KaiRunnerConfig {
   // Logging
-  logLevel?: { 
-    console: string; 
-    file: string; 
+  logLevel?: {
+    console: string;
+    file: string;
   };
   logDir?: string;
 

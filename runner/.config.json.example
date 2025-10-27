@@ -1,7 +1,7 @@
 {
   "logLevel": {
-    "console": "info",
-    "file": "silly"
+    "console": "error",
+    "file": "debug"
   },
   "logDir": "./logs",
 

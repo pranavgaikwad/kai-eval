@@ -62,28 +62,25 @@ See [Configuration](#configuration) for more details on the configuration file a
 
 ### Development Setup
 
-For development, copy `.config.json.example` to `.config.json` and edit the file with your settings. Dependencies can be downloaded using `npm run build-deps` which will be downloaded into the `vendor` directory. The `.config.json.example` file contains paths to these dependencies already. 
+This project depends on `@editor-extensions/agentic` and `@editor-extensions/shared` as packages. They are vendored in as local deps and need to be built prior to building this project. The `npm run pre-build` command builds these deps off of `main` branch of [editor-extensions](https://github.com/konveyor/editor-extensions). This is triggered in `npm run build` command as well. You can set `PATH_EDITOR_EXTENSIONS` in `.env` file to use a local editor extensions repo instead.
 
-You will need to configure environment variables. See [Configuration](#configuration) for more details on the configuration file and environment variables.
+To build the project:
 
-> `@editor-extensions/agentic" is used as a dependency which is vendored in as a local dep. `npm run build-deps` downloads it already, you can use a local one by setting `PATH_EDITOR_EXTENSIONS` environment variable.
-
-**Build the project and run tests:**
 ```bash
-# [REQUIRED] Setup editor-extensions and other deps
-npm run build-deps
-
-# Install dependencies
-npm install
-
 # Build the project
+# This will also pull in and build the editor-extensions packages needed
 npm run build
+```
+
+To run the project, you will also need to setup some runtime dependencies needed for analysis such as JDTLS, Java Bundle, rulesets, etc. Run `npm run pre-run` command to pull in these dependencies. Either podman or docker is needed to run _pre-run_ command. The configuration for these dependencies is done in `.config.json` file. The example `.config.json.example` file already comes pre-configured with paths from `npm run pre-run` command. You can copy it to `.config.json` as-is. See [Configuration](#configuration) for more information on runtime configuration.
+
+
+```sh
+# Setup dependencies at paths in .config.json.example
+npm run pre-run
 
 # Run tests
 npm test
-
-# Development with hot reload
-npm run dev
 
 # Run the CLI
 node dist/main.js -c .config.json
@@ -108,6 +105,8 @@ Configuration precedence: CLI arguments > JSON configuration file > environment 
 | `solutionServerUrl` | string | Solution server endpoint URL |
 | `logLevel` | object | Console and file logging levels |
 | `logDir` | string | Directory for log files |
+
+See [types.ts](./src/types.ts).
 
 ### Environment Variables
 

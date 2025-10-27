@@ -1,4 +1,4 @@
-import { createLogger, format, transports, Logger } from 'winston';
+import { createLogger, format, transports, Logger } from "winston";
 import TransportStream from "winston-transport";
 
 export const orderedJsonFormat = format.printf((info) => {
@@ -8,8 +8,8 @@ export const orderedJsonFormat = format.printf((info) => {
 
   if (timestamp) ordered.timestamp = timestamp;
   if (level) ordered.level = level;
-  if (component) ordered.component = component;
   if (module) ordered.module = module;
+  if (component) ordered.component = component;
   if (message) ordered.message = message;
 
   const sortedKeys = Object.keys(rest).sort();
@@ -21,31 +21,28 @@ export const orderedJsonFormat = format.printf((info) => {
 });
 
 export function createOrderedLogger(
-  consoleLevel: string = 'info',
+  consoleLevel: string = "info",
   fileLevel?: string,
-  filePath?: string
+  filePath?: string,
 ): Logger {
   const loggerTransports: TransportStream[] = [
     new transports.Console({
-      level: consoleLevel
-    })
+      level: consoleLevel,
+    }),
   ];
 
   if (fileLevel && filePath) {
     loggerTransports.push(
       new transports.File({
         filename: filePath,
-        level: fileLevel
-      })
+        level: fileLevel,
+      }),
     );
   }
 
   return createLogger({
-    level: 'silly', // Set to lowest level, let transports filter
-    format: format.combine(
-      format.timestamp(),
-      orderedJsonFormat
-    ),
-    transports: loggerTransports
+    level: "silly", // Set to lowest level, let transports filter
+    format: format.combine(format.timestamp(), orderedJsonFormat),
+    transports: loggerTransports,
   });
 }

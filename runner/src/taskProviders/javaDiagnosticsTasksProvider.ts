@@ -4,17 +4,21 @@ import * as path from "path";
 
 import { Logger } from "winston";
 
-import { DiagnosticTask, DiagnosticTaskFactory } from "./tasks";
-import { TaskProvider, Task, BaseInitParams } from "./types/taskProvider";
-import { EventDebouncer } from "../utils/eventDebouncer";
-import { FileWatchCapable, FileChangeEvent } from "../utils/fsWatch";
-import { TasksStoreManager } from "./managers/diagnosticsManager";
-import { ProcessManager } from "./managers/processManager";
-import { RPCConnectionManager } from "./managers/rpcConnectionManager";
 import {
+  TasksStoreManager,
+  ProcessManager,
+  RPCConnectionManager,
+} from "./managers";
+import { DiagnosticTask, DiagnosticTaskFactory } from "./tasks";
+import {
+  TaskProvider,
+  Task,
+  BaseInitParams,
   Diagnostic,
   InitializeParams,
-} from "./types/lsp";
+} from "./types";
+import { EventDebouncer } from "../utils/eventDebouncer";
+import { FileWatchCapable, FileChangeEvent } from "../utils/fsWatch";
 import { pathToUri } from "../utils/paths";
 
 export interface JavaDiagnosticsInitParams extends BaseInitParams {
@@ -29,35 +33,48 @@ export interface JavaDiagnosticsInitResult {
 }
 
 export class JavaDiagnosticsTasksProvider
-  implements FileWatchCapable, TaskProvider<JavaDiagnosticsInitParams, JavaDiagnosticsInitResult>
+  implements
+    FileWatchCapable,
+    TaskProvider<JavaDiagnosticsInitParams, JavaDiagnosticsInitResult>
 {
   private readonly connectionManager: RPCConnectionManager;
-  private readonly diagnosticsManager: TasksStoreManager<Diagnostic, DiagnosticTask>;
+  private readonly diagnosticsManager: TasksStoreManager<
+    Diagnostic,
+    DiagnosticTask
+  >;
   private readonly processManager: ProcessManager;
   private readonly debouncer: EventDebouncer<FileChangeEvent>;
   private initialized = false;
   private pipeName?: string;
-  private diagnosticsUpdatePromise?: { resolve: () => void; timeout: NodeJS.Timeout };
+  private diagnosticsUpdatePromise?: {
+    resolve: () => void;
+    timeout: NodeJS.Timeout;
+  };
 
   constructor(private readonly logger: Logger) {
     this.connectionManager = new RPCConnectionManager(
-      logger.child({ module: 'JavaLSPConnectionManager' }));
+      logger.child({ module: "JavaLSPConnectionManager" }),
+    );
     this.diagnosticsManager = new TasksStoreManager(
-      logger.child({ module: "JavaDiagnosticsStore" }), new DiagnosticTaskFactory());
+      logger.child({ module: "JavaDiagnosticsStore" }),
+      new DiagnosticTaskFactory(),
+    );
     this.processManager = new ProcessManager(
-      logger.child({ module: 'JdtlsProcessManager' }));
-    this.logger = logger.child({ module: 'JavaDiagnosticsTasksProvider' });
+      logger.child({ module: "JdtlsProcessManager" }),
+    );
+    this.logger = logger.child({ module: "JavaDiagnosticsTasksProvider" });
 
     this.debouncer = new EventDebouncer(this.logger, {
-        debounceMs: 1000,
-        processor: this.getLatestDiagnostics.bind(this),
-        filter: this.filterJavaFiles.bind(this),
-        deduplicate: this.deduplicateByPath.bind(this),
-      },
-    );
+      debounceMs: 1000,
+      processor: this.getLatestDiagnostics.bind(this),
+      filter: this.filterJavaFiles.bind(this),
+      deduplicate: this.deduplicateByPath.bind(this),
+    });
   }
 
-  async init(params: JavaDiagnosticsInitParams): Promise<JavaDiagnosticsInitResult> {
+  async init(
+    params: JavaDiagnosticsInitParams,
+  ): Promise<JavaDiagnosticsInitResult> {
     await this.validateInitParams(params);
     const javaExecutable = await this.getJavaExecutable();
     const jdtlsArgs = await this.buildJdtlsArgs(params);
@@ -68,27 +85,35 @@ export class JavaDiagnosticsTasksProvider
     } catch (error) {
       throw new Error(`Failed to create log directory: ${logDir} - ${error}`);
     }
-    const { pipeName } = await this.processManager.spawn(javaExecutable, jdtlsArgs, {
-      cwd: logDir,
-      onExit: () => {
-        this.initialized = false;
+    const { pipeName } = await this.processManager.spawn(
+      javaExecutable,
+      jdtlsArgs,
+      {
+        cwd: logDir,
+        onExit: () => {
+          this.initialized = false;
+        },
+        onStderr: async (data) => {
+          try {
+            await fs.appendFile(path.join(logDir, "jdtls.log"), data);
+          } catch (error) {
+            this.logger.error("Failed to append JDTLS stderr to log file", {
+              error,
+            });
+          }
+        },
+        onStdout: async (data) => {
+          try {
+            await fs.appendFile(path.join(logDir, "jdtls.log"), data);
+          } catch (error) {
+            this.logger.error("Failed to append JDTLS stdout to log file", {
+              error,
+            });
+          }
+        },
+        listenOnPipe: true,
       },
-      onStderr: async (data) => {
-        try {
-          await fs.appendFile(path.join(logDir, "jdtls.log"), data);
-        } catch (error) {
-          this.logger.error("Failed to append JDTLS stderr to log file", { error });
-        }
-      },
-      onStdout: async (data) => {
-        try {
-          await fs.appendFile(path.join(logDir, "jdtls.log"), data);
-        } catch (error) {
-          this.logger.error("Failed to append JDTLS stdout to log file", { error });
-        }
-      },
-      listenOnPipe: true,
-    });
+    );
     if (!pipeName) {
       throw new Error("Failed to spawn process and create pipe");
     }
@@ -135,7 +160,9 @@ export class JavaDiagnosticsTasksProvider
     this.debouncer.addEvent(event);
   }
 
-  private async validateInitParams(params: JavaDiagnosticsInitParams): Promise<void> {
+  private async validateInitParams(
+    params: JavaDiagnosticsInitParams,
+  ): Promise<void> {
     if (!params.jdtlsBinaryPath) {
       throw new Error("jdtBinaryPath is required");
     }
@@ -147,7 +174,7 @@ export class JavaDiagnosticsTasksProvider
       await fs.access(params.jdtlsBinaryPath);
     } catch (error) {
       throw new Error(
-        `JDTLS binary not found at path: ${params.jdtlsBinaryPath} - ${error}`
+        `JDTLS binary not found at path: ${params.jdtlsBinaryPath} - ${error}`,
       );
     }
 
@@ -156,11 +183,13 @@ export class JavaDiagnosticsTasksProvider
         const stat = await fs.stat(workspacePath);
         if (!stat.isDirectory()) {
           throw new Error(
-            `Workspace path is not a directory: ${workspacePath}`
+            `Workspace path is not a directory: ${workspacePath}`,
           );
         }
       } catch (error) {
-        throw new Error(`Workspace path does not exist: ${workspacePath} - ${error}`);
+        throw new Error(
+          `Workspace path does not exist: ${workspacePath} - ${error}`,
+        );
       }
     }
   }
@@ -172,7 +201,7 @@ export class JavaDiagnosticsTasksProvider
       const javaExecToTest = path.join(
         javaHome,
         "bin",
-        "java" + (os.platform() === "win32" ? ".exe" : "")
+        "java" + (os.platform() === "win32" ? ".exe" : ""),
       );
       try {
         await fs.access(javaExecToTest);
@@ -224,7 +253,7 @@ export class JavaDiagnosticsTasksProvider
   }
 
   private async buildJdtlsArgs(
-    params: JavaDiagnosticsInitParams
+    params: JavaDiagnosticsInitParams,
   ): Promise<string[]> {
     const jdtlsBaseDir = path.dirname(path.dirname(params.jdtlsBinaryPath));
     const sharedConfigPath = await this.getSharedConfigPath(jdtlsBaseDir);
@@ -262,23 +291,25 @@ export class JavaDiagnosticsTasksProvider
   }
 
   private async buildJavaInitializeParams(
-    params: JavaDiagnosticsInitParams
+    params: JavaDiagnosticsInitParams,
   ): Promise<InitializeParams> {
     const absoluteWorkspacePaths = await Promise.all(
       params.workspacePaths.map(async (workspacePath) => {
         return path.resolve(workspacePath);
-      })
+      }),
     );
 
     const primaryWorkspacePath = path.resolve(absoluteWorkspacePaths[0]);
-    const workspaceFolders = absoluteWorkspacePaths.map((path) => pathToUri(path));
+    const workspaceFolders = absoluteWorkspacePaths.map((path) =>
+      pathToUri(path),
+    );
 
     let absoluteBundles: string[] = [];
     if (params.jdtlsBundles) {
       absoluteBundles = await Promise.all(
         params.jdtlsBundles.map(async (bundle) => {
           return path.resolve(bundle);
-        })
+        }),
       );
     }
 
@@ -326,7 +357,7 @@ export class JavaDiagnosticsTasksProvider
 
   private async getLatestDiagnostics(events: FileChangeEvent[]): Promise<void> {
     this.logger.debug("Processing file changes", {
-      changeCount: events.length
+      changeCount: events.length,
     });
     try {
       await this.notifyFileChanges(events);
@@ -342,7 +373,9 @@ export class JavaDiagnosticsTasksProvider
         }, 5000);
         this.diagnosticsUpdatePromise = { resolve, timeout };
       });
-      this.logger.debug("File changes processed and Java diagnostics refreshed");
+      this.logger.debug(
+        "File changes processed and Java diagnostics refreshed",
+      );
     } catch (error) {
       this.logger.warn("Failed to refresh Java diagnostics", { error });
     }
@@ -354,25 +387,36 @@ export class JavaDiagnosticsTasksProvider
         switch (event.type) {
           case "created":
             await this.connectionManager.openTextDocument(
-              event.path, await fs.readFile(event.path, 'utf-8'));
+              event.path,
+              await fs.readFile(event.path, "utf-8"),
+            );
             break;
           case "modified": {
-            const fileContent = await fs.readFile(event.path, 'utf-8');
-            await this.connectionManager.openTextDocument(event.path, fileContent);
-            await this.connectionManager.changeTextDocument(event.path, fileContent);
+            const fileContent = await fs.readFile(event.path, "utf-8");
+            await this.connectionManager.openTextDocument(
+              event.path,
+              fileContent,
+            );
+            await this.connectionManager.changeTextDocument(
+              event.path,
+              fileContent,
+            );
             break;
           }
           case "deleted":
             await this.connectionManager.closeTextDocument(event.path);
             break;
           default:
-            this.logger.warn("Unknown file change event type", { type: event.type, path: event.path });
+            this.logger.warn("Unknown file change event type", {
+              type: event.type,
+              path: event.path,
+            });
         }
       } catch (error) {
         this.logger.warn("Failed to notify file change", {
           path: event.path,
           type: event.type,
-          error
+          error,
         });
       }
     }
@@ -410,4 +454,3 @@ export class JavaDiagnosticsTasksProvider
     return Array.from(eventMap.values());
   }
 }
-

@@ -21,12 +21,13 @@
   "scripts": {
     "clean": "rimraf dist",
     "ci": "npm run lint && npm test",
-    "test": "jest",
+    "test": "jest -i",
     "lint": "eslint src",
     "lint:fix": "eslint --fix src",
     "format": "eslint --fix .",
-    "build-deps": "./scripts/build-deps.sh",
-    "prebuild": "npm run clean && npm run build-deps",
+    "pre-build": "./scripts/collect-build-deps.sh && npm install",
+    "pre-run": "./scripts/collect-runtime-deps.sh",
+    "prebuild": "npm run clean && npm run pre-build",
     "build": "tsup src/index.ts src/main.ts --dts --format esm,cjs --out-dir dist --clean",
     "dev": "tsup src/index.ts --dts --format esm,cjs --out-dir dist --watch"
   },
@@ -36,6 +37,7 @@
   },
   "dependencies": {
     "@editor-extensions/agentic": "file:./vendor/editor-extensions-agentic-0.4.0.tgz",
+    "@editor-extensions/shared": "file:./vendor/editor-extensions-shared-0.4.0.tgz",
     "@langchain/aws": "^0.1.0",
     "@langchain/core": "^0.3.78",
     "@langchain/deepseek": "^0.1.0",

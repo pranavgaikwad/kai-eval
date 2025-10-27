@@ -7,7 +7,7 @@ const importPluginCompat = importPlugin.default || importPlugin;
 export default [
   // Global ignores for the runner package
   {
-    ignores: ["**/node_modules/**", "**/dist/**"],
+    ignores: ["**/node_modules/**", "**/dist/**", "**/vendor/**"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

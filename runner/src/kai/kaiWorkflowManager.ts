@@ -19,9 +19,8 @@ import {
 import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
 import { Logger } from "winston";
 
-import { TaskManager } from "../taskManager/taskManager";
+import { TaskManager } from "../taskManager";
 import { getFilteredTasks } from "../utils/tasks";
-
 
 export interface KaiWorkflowManagerOptions {
   logger: Logger;
@@ -35,7 +34,8 @@ export interface KaiWorkflowManagerOptions {
 export class KaiWorkflowManager {
   private workflow: KaiInteractiveWorkflow;
   private isInitialized: boolean = false;
-  private pendingInteractions: Map<string, (response: unknown) => void> = new Map();
+  private pendingInteractions: Map<string, (response: unknown) => void> =
+    new Map();
   private workspaceDir: string = "";
 
   // stream buffer
@@ -49,7 +49,10 @@ export class KaiWorkflowManager {
   constructor(
     private readonly logger: Logger,
     private readonly taskManager: TaskManager,
-    private readonly logDir: string = path.join(os.tmpdir(), `kai-workflow-trace-${Date.now()}`)
+    private readonly logDir: string = path.join(
+      os.tmpdir(),
+      `kai-workflow-trace-${Date.now()}`,
+    ),
   ) {
     this.logger = logger.child({ module: "KaiWorkflowManager" });
     this.workflow = new KaiInteractiveWorkflow(this.logger);
@@ -94,7 +97,7 @@ export class KaiWorkflowManager {
         programmingLanguage: input.programmingLanguage,
         migrationHint: input.migrationHint,
         enableAgentMode: input.enableAgentMode,
-        incidentCount: input.incidents?.length || 0
+        incidentCount: input.incidents?.length || 0,
       });
 
       await this.workflow.run(input);
@@ -109,7 +112,9 @@ export class KaiWorkflowManager {
   cleanup(): void {
     this.workflow.removeAllListeners();
     this.pendingInteractions.clear();
-    this.logger.info("Kai workflow manager cleaned up", { traceDir: this.traceDir });
+    this.logger.info("Kai workflow manager cleaned up", {
+      traceDir: this.traceDir,
+    });
   }
 
   private setupEventHandlers(): void {
@@ -120,7 +125,9 @@ export class KaiWorkflowManager {
     });
   }
 
-  private async handleWorkflowMessage(message: KaiWorkflowMessage): Promise<void> {
+  private async handleWorkflowMessage(
+    message: KaiWorkflowMessage,
+  ): Promise<void> {
     switch (message.type) {
       case KaiWorkflowMessageType.LLMResponseChunk: {
         const chunk = message.data;
@@ -138,7 +145,7 @@ export class KaiWorkflowManager {
         await this.writeMessageToTrace(message.data as AIMessage);
         break;
       case KaiWorkflowMessageType.ModifiedFile:
-        this.handleModifiedFile(message);
+        await this.handleModifiedFile(message);
         break;
       case KaiWorkflowMessageType.UserInteraction:
         this.handleUserInteraction(message);
@@ -146,8 +153,11 @@ export class KaiWorkflowManager {
       case KaiWorkflowMessageType.Error:
         this.logger.error("Workflow error message", {
           messageId: message.id,
-          error: message.data
+          error: message.data,
         });
+        break;
+      case KaiWorkflowMessageType.ToolCall:
+        this.logger.debug("Tool call message", { data: message.data });
         break;
       default:
         this.logger.warn("Unknown workflow message type", { message });
@@ -155,22 +165,39 @@ export class KaiWorkflowManager {
     }
   }
 
-  private handleModifiedFile(message: KaiWorkflowMessage): void {
+  private async handleModifiedFile(message: KaiWorkflowMessage): Promise<void> {
     if (message.type === KaiWorkflowMessageType.ModifiedFile) {
       const modifiedFile = message.data as KaiModifiedFile;
       this.logger.info("File modified by workflow", {
         messageId: message.id,
         path: modifiedFile.path,
         contentLength: modifiedFile.content.length,
-        hasUserInteraction: !!modifiedFile.userInteraction
+        hasUserInteraction: !!modifiedFile.userInteraction,
       });
-      this.applyFileChanges(modifiedFile, message.id).catch((error) => {
-        this.logger.error("Failed to apply file changes", {
-          messageId: message.id,
-          path: modifiedFile.path,
-          error
+      try {
+        await this.applyFileChanges(modifiedFile, message.id).catch((error) => {
+          this.logger.error("Failed to apply file changes", {
+            messageId: message.id,
+            path: modifiedFile.path,
+            error,
+          });
         });
-      });
+      } finally {
+        if (modifiedFile.userInteraction) {
+          await this.workflow.resolveUserInteraction({
+            type: KaiWorkflowMessageType.UserInteraction,
+            id: message.id,
+            data: {
+              ...modifiedFile.userInteraction,
+              response: {
+                yesNo: true,
+                choice: 0,
+                tasks: [],
+              },
+            },
+          } as KaiUserInteractionMessage);
+        }
+      }
     }
   }
 
@@ -180,31 +207,37 @@ export class KaiWorkflowManager {
       this.logger.info("User interaction required", {
         messageId: message.id,
         interactionType: interaction.type,
-        systemMessage: interaction.systemMessage
+        systemMessage: interaction.systemMessage,
       });
 
       this.autoRespondToUserInteraction(message, message).catch((error) => {
-        this.logger.error("Failed to handle user interaction", { messageId: message.id, error });
+        this.logger.error("Failed to handle user interaction", {
+          messageId: message.id,
+          error,
+        });
       });
     }
   }
 
-  private async applyFileChanges(modifiedFile: KaiModifiedFile, messageId: string): Promise<void> {
+  private async applyFileChanges(
+    modifiedFile: KaiModifiedFile,
+    messageId: string,
+  ): Promise<void> {
     try {
       const resolvedPath = this.resolveFilePath(modifiedFile.path);
       await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
-      await fs.writeFile(resolvedPath, modifiedFile.content, 'utf-8');
+      await fs.writeFile(resolvedPath, modifiedFile.content, "utf-8");
       this.logger.info("Successfully applied file changes", {
         messageId,
         originalPath: modifiedFile.path,
         resolvedPath,
-        contentLength: modifiedFile.content.length
+        contentLength: modifiedFile.content.length,
       });
     } catch (error) {
       this.logger.error("Failed to write modified file", {
         messageId,
         path: modifiedFile.path,
-        error
+        error,
       });
       throw error;
     }
@@ -221,13 +254,22 @@ export class KaiWorkflowManager {
   private async writeMessageToTrace(message: AIMessage): Promise<void> {
     try {
       const filepath = path.join(this.traceDir, `llm_responses.txt`);
-      await fs.appendFile(filepath, `${JSON.stringify(message.toJSON(), null, 2)}\n`);
+      await fs.appendFile(
+        filepath,
+        `${JSON.stringify(message.toJSON(), null, 2)}\n`,
+      );
     } catch (error) {
-      this.logger.warn("Failed to write message trace", { error, messageId: message.id });
+      this.logger.warn("Failed to write message trace", {
+        error,
+        messageId: message.id,
+      });
     }
   }
 
-  private async autoRespondToUserInteraction(message: KaiWorkflowMessage, msg: KaiUserInteractionMessage): Promise<void> {
+  private async autoRespondToUserInteraction(
+    message: KaiWorkflowMessage,
+    msg: KaiUserInteractionMessage,
+  ): Promise<void> {
     const { data: interaction } = msg;
     switch (interaction.type) {
       case "yesNo":
@@ -248,25 +290,36 @@ export class KaiWorkflowManager {
           const filteredTasks = await getFilteredTasks(this.taskManager, 3);
           this.logger.info("Filtered tasks for user interaction", {
             messageId: message.id,
-            taskCount: filteredTasks.length
+            taskCount: filteredTasks.length,
           });
 
           interaction.response = {
             ...interaction.response,
             yesNo: true,
-            tasks: filteredTasks
+            tasks: filteredTasks,
           };
         } catch (error) {
-          this.logger.error("Failed to get filtered tasks", { messageId: message.id, error });
+          this.logger.error("Failed to get filtered tasks", {
+            messageId: message.id,
+            error,
+          });
           interaction.response = { yesNo: false };
         }
         break;
       default:
-        this.logger.warn("Unknown interaction type, defaulting to no", { type: interaction.type });
+        this.logger.warn("Unknown interaction type, defaulting to no", {
+          type: interaction.type,
+        });
         interaction.response = { yesNo: false };
     }
-    msg.data = interaction;
-
-    await this.workflow.resolveUserInteraction(msg);
+    const updatedMsg = {
+      ...msg,
+      data: {
+        ...msg.data,
+        interaction,
+      },
+    };
+    this.logger.debug("Resolving user interaction", { updatedMsg });
+    await this.workflow.resolveUserInteraction(updatedMsg);
   }
 }

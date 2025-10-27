@@ -2,11 +2,10 @@
 
 import { program } from "commander";
 
-import { SupportedModelProviders } from "./kai/modelProvider";
-import { setupKaiRunner } from "./setup/kaiRunner";
+import { SupportedModelProviders } from "./kai";
+import { setupKaiRunner } from "./cli";
 import { KaiRunnerConfig } from "./types";
 import { loadConfig, loadEnv } from "./utils/config";
-
 
 async function main(): Promise<void> {
   program
@@ -25,7 +24,7 @@ async function main(): Promise<void> {
     .option("--rules-path <paths>", "Comma-separated rule file paths")
     .option("--targets <targets>", "Comma-separated target list")
     .option("--sources <sources>", "Comma-separated source list")
-    .option("--solution-server-url <url>", "Solution server URL")
+    .option("--solution-server-url <url>", "Solution server URL");
 
   program.parse();
 
@@ -59,12 +58,7 @@ async function main(): Promise<void> {
 
     // TODO (pgaikwad): pass the right incidents
     // Setup Kai runner with merged configuration
-    const kaiRunnerSetup = await setupKaiRunner(finalConfig, {
-      incidents: [],
-      programmingLanguage: "Java",
-      migrationHint: "",
-      enableAgentMode: false,
-    }, env);
+    const kaiRunnerSetup = await setupKaiRunner(finalConfig, env);
     const { logger, shutdown: kaiShutdown } = kaiRunnerSetup;
 
     // Setup graceful shutdown
@@ -83,19 +77,20 @@ async function main(): Promise<void> {
 
     // Keep the process alive
     logger.info("Kai runner is ready. Press Ctrl+C to stop.");
-
   } catch (error) {
     console.error("Error starting Kai runner:", error);
     process.exit(1);
   }
 }
 
-
-function mergeConfig(jsonConfig: KaiRunnerConfig, cliOptions: KaiRunnerConfig): KaiRunnerConfig {
+function mergeConfig(
+  jsonConfig: KaiRunnerConfig,
+  cliOptions: KaiRunnerConfig,
+): KaiRunnerConfig {
   return {
     ...jsonConfig,
     ...Object.fromEntries(
-      Object.entries(cliOptions).filter(([, value]) => value !== undefined)
+      Object.entries(cliOptions).filter(([, value]) => value !== undefined),
     ),
   };
 }

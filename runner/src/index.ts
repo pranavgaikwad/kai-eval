@@ -1,5 +1,5 @@
-export * from "./setup/providers";
+export * from "./cli/providers";
 export * from "./taskManager";
 export * from "./taskProviders";
-export * from "./setup";
+export * from "./cli";
 export * from "./types";

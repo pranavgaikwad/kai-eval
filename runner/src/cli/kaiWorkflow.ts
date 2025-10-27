@@ -3,34 +3,18 @@ import {
   InMemoryCacheWithRevisions,
   FileBasedResponseCache,
 } from "@editor-extensions/agentic";
-import { Logger } from "winston";
+import { SolutionServerConfig } from "@editor-extensions/shared";
 
-import { KaiWorkflowManager, KaiWorkflowManagerOptions } from "../kai/kaiWorkflowManager";
-import { createModelProvider, SupportedModelProviders } from "../kai/modelProvider";
-import { TaskManager } from "../taskManager";
+import { KaiWorkflowSetupConfig, KaiWorkflowSetupResult } from "./types";
+import {
+  KaiWorkflowManager,
+  KaiWorkflowManagerOptions,
+  createModelProvider,
+} from "../kai";
 
-interface ModelConfig {
-  provider: SupportedModelProviders;
-  args: Record<string, unknown>;
-}
-
-export interface KaiWorkflowSetupConfig {
-  workspaceDir: string;
-  logger: Logger;
-  taskManager: TaskManager;
-  modelConfig?: ModelConfig;
-  env?: Record<string, string>;
-  solutionServerUrl?: string;
-  logDir: string;
-}
-
-
-export interface KaiSetupResult {
-  kaiWorkflowManager: KaiWorkflowManager;
-  shutdown: () => Promise<void>;
-}
-
-export async function setupKaiWorkflow(config: KaiWorkflowSetupConfig): Promise<KaiSetupResult> {
+export async function setupKaiWorkflow(
+  config: KaiWorkflowSetupConfig,
+): Promise<KaiWorkflowSetupResult> {
   const logger = config.logger.child({ module: "KaiSetup" });
   logger.info("Setting up Kai workflow system");
 
@@ -44,25 +28,36 @@ export async function setupKaiWorkflow(config: KaiWorkflowSetupConfig): Promise<
 
     logger.info("Creating model provider", {
       provider: modelConfig.provider,
-      modelArgs: Object.keys(modelConfig.args)
+      modelArgs: Object.keys(modelConfig.args),
     });
 
     const modelProvider = await createModelProvider(
       modelConfig.provider,
       modelConfig.args,
       env,
-      logger
+      logger,
     );
 
     logger.info("Creating solution server client");
 
     const solutionServerClient = new SolutionServerClient(
-      config.solutionServerUrl || "http://localhost:8080",
-      logger
+      {
+        enabled: false,
+        auth: {
+          enabled: false,
+          realm: "",
+          insecure: false,
+        },
+        url: config.solutionServerUrl || "",
+      },
+      logger,
     );
 
     const fsCache = new InMemoryCacheWithRevisions<string, string>(false);
-    const toolCache = new FileBasedResponseCache<Record<string, unknown>, string>(
+    const toolCache = new FileBasedResponseCache<
+      Record<string, unknown>,
+      string
+    >(
       false,
       (input: string | Record<string, unknown>) => JSON.stringify(input),
       (input: string) => JSON.parse(input),
@@ -73,7 +68,7 @@ export async function setupKaiWorkflow(config: KaiWorkflowSetupConfig): Promise<
     const kaiWorkflowManager = new KaiWorkflowManager(
       logger,
       config.taskManager,
-      config.logDir
+      config.logDir,
     );
 
     const workflowOptions: KaiWorkflowManagerOptions = {

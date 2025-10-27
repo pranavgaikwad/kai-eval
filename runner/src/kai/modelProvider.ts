@@ -2,14 +2,29 @@ import {
   KaiModelProvider,
   KaiModelProviderInvokeCallOptions,
 } from "@editor-extensions/agentic";
-import { ChatBedrockConverse, type ChatBedrockConverseInput } from "@langchain/aws";
+import {
+  ChatBedrockConverse,
+  type ChatBedrockConverseInput,
+} from "@langchain/aws";
 import { BaseLanguageModelInput } from "@langchain/core/language_models/base";
-import { BaseChatModel, type BindToolsInput } from "@langchain/core/language_models/chat_models";
-import { AIMessage, AIMessageChunk, BaseMessage, HumanMessage, isBaseMessage } from "@langchain/core/messages";
+import {
+  BaseChatModel,
+  type BindToolsInput,
+} from "@langchain/core/language_models/chat_models";
+import {
+  AIMessage,
+  AIMessageChunk,
+  BaseMessage,
+  HumanMessage,
+  isBaseMessage,
+} from "@langchain/core/messages";
 import { BasePromptValue } from "@langchain/core/prompt_values";
 import { IterableReadableStream } from "@langchain/core/utils/stream";
 import { ChatDeepSeek } from "@langchain/deepseek";
-import { ChatGoogleGenerativeAI, type GoogleGenerativeAIChatInput } from "@langchain/google-genai";
+import {
+  ChatGoogleGenerativeAI,
+  type GoogleGenerativeAIChatInput,
+} from "@langchain/google-genai";
 import { ChatOllama } from "@langchain/ollama";
 import { AzureChatOpenAI, ChatOpenAI } from "@langchain/openai";
 import { Logger } from "winston";
@@ -58,9 +73,9 @@ function hitMaxTokens(chunk: AIMessageChunk | undefined): boolean {
     return (
       data &&
       ("messageStop" in data &&
-       data.messageStop &&
-       typeof data.messageStop === "object" &&
-       "stopReason" in data.messageStop
+      data.messageStop &&
+      typeof data.messageStop === "object" &&
+      "stopReason" in data.messageStop
         ? (data.messageStop as { stopReason: unknown }).stopReason
         : undefined)
     );
@@ -71,7 +86,9 @@ function hitMaxTokens(chunk: AIMessageChunk | undefined): boolean {
   );
 }
 
-function languageModelInputToMessages(input: BaseLanguageModelInput): BaseMessage[] {
+function languageModelInputToMessages(
+  input: BaseLanguageModelInput,
+): BaseMessage[] {
   let messages: BaseMessage[];
   if (typeof input === "string") {
     messages = [new HumanMessage(input)];
@@ -95,7 +112,7 @@ export async function createModel(
   provider: SupportedModelProviders,
   args: Record<string, unknown>,
   env: Record<string, string>,
-  _logger: Logger
+  _logger: Logger,
 ): Promise<BaseChatModel> {
   switch (provider) {
     case "AzureChatOpenAI": {
@@ -105,7 +122,11 @@ export async function createModel(
         maxRetries: 2,
       };
       const mergedArgs = { ...defaultArgs, ...args };
-      validateMissingConfigKeys(env, ["AZURE_OPENAI_API_KEY"], "environment variable(s)");
+      validateMissingConfigKeys(
+        env,
+        ["AZURE_OPENAI_API_KEY"],
+        "environment variable(s)",
+      );
       return new AzureChatOpenAI({
         openAIApiKey: env.AZURE_OPENAI_API_KEY,
         ...mergedArgs,
@@ -139,7 +160,11 @@ export async function createModel(
       };
       const mergedArgs = { ...defaultArgs, ...args };
       validateMissingConfigKeys(mergedArgs, ["model"], "model arg(s)");
-      validateMissingConfigKeys(env, ["DEEPSEEK_API_KEY"], "environment variable(s)");
+      validateMissingConfigKeys(
+        env,
+        ["DEEPSEEK_API_KEY"],
+        "environment variable(s)",
+      );
       return new ChatDeepSeek({
         apiKey: env.DEEPSEEK_API_KEY,
         ...mergedArgs,
@@ -153,7 +178,11 @@ export async function createModel(
       };
       const mergedArgs = { ...defaultArgs, ...args };
       validateMissingConfigKeys(mergedArgs, ["model"], "model arg(s)");
-      validateMissingConfigKeys(env, ["GOOGLE_API_KEY"], "environment variable(s)");
+      validateMissingConfigKeys(
+        env,
+        ["GOOGLE_API_KEY"],
+        "environment variable(s)",
+      );
       return new ChatGoogleGenerativeAI({
         apiKey: env.GOOGLE_API_KEY,
         ...mergedArgs,
@@ -165,7 +194,11 @@ export async function createModel(
         streaming: true,
       };
       const mergedArgs = { ...defaultArgs, ...args };
-      validateMissingConfigKeys(mergedArgs, ["model", "baseUrl"], "model arg(s)");
+      validateMissingConfigKeys(
+        mergedArgs,
+        ["model", "baseUrl"],
+        "model arg(s)",
+      );
       return new ChatOllama({
         ...mergedArgs,
       });
@@ -178,7 +211,11 @@ export async function createModel(
       };
       const mergedArgs = { ...defaultArgs, ...args };
       validateMissingConfigKeys(mergedArgs, ["model"], "model arg(s)");
-      validateMissingConfigKeys(env, ["OPENAI_API_KEY"], "environment variable(s)");
+      validateMissingConfigKeys(
+        env,
+        ["OPENAI_API_KEY"],
+        "environment variable(s)",
+      );
       return new ChatOpenAI({
         openAIApiKey: env.OPENAI_API_KEY,
         ...mergedArgs,
@@ -189,7 +226,9 @@ export async function createModel(
   }
 }
 
-export function getModelCapabilities(provider: SupportedModelProviders): ModelCapabilities {
+export function getModelCapabilities(
+  provider: SupportedModelProviders,
+): ModelCapabilities {
   switch (provider) {
     case "ChatBedrock":
     case "ChatOpenAI":
@@ -214,17 +253,21 @@ export function getModelCapabilities(provider: SupportedModelProviders): ModelCa
 }
 
 export class BaseModelProvider implements KaiModelProvider {
-  constructor(private readonly options: ModelProviderOptions) {}
+  constructor(private readonly options: ModelProviderOptions) {
+    options.logger = options.logger.child({
+      module: "ModelProvider",
+    });
+  }
 
   async invoke(
     input: BaseLanguageModelInput,
-    options?: Partial<KaiModelProviderInvokeCallOptions>
+    options?: Partial<KaiModelProviderInvokeCallOptions>,
   ): Promise<AIMessage> {
     const runnable = this.options.nonStreamingModel;
 
     const messages: BaseMessage[] = languageModelInputToMessages(input);
 
-    let response = await runnable.invoke(messages, options) as AIMessageChunk;
+    let response = (await runnable.invoke(messages, options)) as AIMessageChunk;
 
     let maxTokensReached = hitMaxTokens(response);
     let attempts = 10;
@@ -233,7 +276,10 @@ export class BaseModelProvider implements KaiModelProvider {
         "Max tokens reached during invoke, continuing generation, attempts left: ",
         attempts,
       );
-      const newResponse: AIMessageChunk = await runnable.invoke([...messages, response], options) as AIMessageChunk;
+      const newResponse: AIMessageChunk = (await runnable.invoke(
+        [...messages, response],
+        options,
+      )) as AIMessageChunk;
       response = response.concat(newResponse);
       maxTokensReached = hitMaxTokens(newResponse);
       attempts--;
@@ -242,7 +288,10 @@ export class BaseModelProvider implements KaiModelProvider {
     return response;
   }
 
-  async stream(input: BaseLanguageModelInput, options?: Partial<KaiModelProviderInvokeCallOptions>): Promise<IterableReadableStream<AIMessageChunk>> {
+  async stream(
+    input: BaseLanguageModelInput,
+    options?: Partial<KaiModelProviderInvokeCallOptions>,
+  ): Promise<IterableReadableStream<AIMessageChunk>> {
     const runnable = this.options.streamingModel;
 
     const messages: BaseMessage[] = languageModelInputToMessages(input);
@@ -286,17 +335,26 @@ export class BaseModelProvider implements KaiModelProvider {
           logger.error(`Error streaming: ${error}`);
           controller.error(error);
         }
-      }
+      },
     }) as IterableReadableStream<AIMessageChunk>;
   }
 
-  bindTools(tools: BindToolsInput[], kwargs?: Partial<KaiModelProviderInvokeCallOptions>): KaiModelProvider {
+  bindTools(
+    tools: BindToolsInput[],
+    kwargs?: Partial<KaiModelProviderInvokeCallOptions>,
+  ): KaiModelProvider {
     if (!this.options.capabilities.supportsTools) {
       throw new Error("This model does not support tool calling");
     }
 
-    const boundStreamingModel = this.options.streamingModel.bindTools?.(tools, kwargs);
-    const boundNonStreamingModel = this.options.nonStreamingModel.bindTools?.(tools, kwargs);
+    const boundStreamingModel = this.options.streamingModel.bindTools?.(
+      tools,
+      kwargs,
+    );
+    const boundNonStreamingModel = this.options.nonStreamingModel.bindTools?.(
+      tools,
+      kwargs,
+    );
 
     if (!boundStreamingModel || !boundNonStreamingModel) {
       throw new Error("Failed to bind tools to model");
@@ -322,12 +380,22 @@ export async function createModelProvider(
   provider: SupportedModelProviders,
   args: Record<string, unknown>,
   env: Record<string, string>,
-  logger: Logger
+  logger: Logger,
 ): Promise<KaiModelProvider> {
   const capabilities = getModelCapabilities(provider);
 
-  const streamingModel = await createModel(provider, { ...args, streaming: true }, env, logger);
-  const nonStreamingModel = await createModel(provider, { ...args, streaming: false }, env, logger);
+  const streamingModel = await createModel(
+    provider,
+    { ...args, streaming: true },
+    env,
+    logger,
+  );
+  const nonStreamingModel = await createModel(
+    provider,
+    { ...args, streaming: false },
+    env,
+    logger,
+  );
 
   const options: ModelProviderOptions = {
     streamingModel,

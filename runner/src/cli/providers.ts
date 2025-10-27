@@ -1,30 +1,12 @@
-import { Logger } from "winston";
-
 import {
   AnalysisTasksProvider,
-  AnalyzerInitParams,
   JavaDiagnosticsTasksProvider,
-  JavaDiagnosticsInitParams,
   JavaDiagnosticsInitResult,
   TaskProvider,
 } from "../taskProviders";
+import { TaskProviderSetupConfig, TaskProviderSetupResult } from "./types";
 import { FileWatchCapable, SharedFileWatcher } from "../utils/fsWatch";
 import { getExcludedPaths } from "../utils/paths";
-
-export interface TaskProviderSetupConfig {
-  workspacePaths: string[];
-  logger: Logger;
-  diagnosticsParams?: Omit<JavaDiagnosticsInitParams, "workspacePaths">;
-  analysisParams?: Omit<AnalyzerInitParams, "pipePath" | "excludedPaths" | "workspacePaths">;
-}
-
-export interface TaskProviderSetupResult {
-  providers: {
-    diagnostics?: JavaDiagnosticsTasksProvider;
-    analysis?: AnalysisTasksProvider;
-  };
-  shutdown: () => Promise<void>;
-}
 
 export async function setupProviders(
   config: TaskProviderSetupConfig,
@@ -33,7 +15,10 @@ export async function setupProviders(
     throw new Error("basePaths must be provided and non-empty");
   }
 
-  const fileWatcher = SharedFileWatcher.getInstance(config.logger, config.workspacePaths);
+  const fileWatcher = SharedFileWatcher.getInstance(
+    config.logger,
+    config.workspacePaths,
+  );
   const providers: TaskProvider[] = [];
   const providerMap: {
     diagnostics?: JavaDiagnosticsTasksProvider;
@@ -65,7 +50,7 @@ export async function setupProviders(
       }
 
       config.logger.info("DiagnosticsProvider initialized", {
-        pipeName: diagResult.pipeName
+        pipeName: diagResult.pipeName,
       });
     }
 
@@ -77,7 +62,10 @@ export async function setupProviders(
       }
 
       config.logger.info("Processing ignore files for analysis exclusions");
-      const excludedPaths = await getExcludedPaths(config.logger, config.workspacePaths);
+      const excludedPaths = await getExcludedPaths(
+        config.logger,
+        config.workspacePaths,
+      );
 
       config.logger.info("Initializing AnalysisProvider");
 
@@ -104,7 +92,7 @@ export async function setupProviders(
     }
 
     config.logger.info("Starting file watcher", {
-      paths: config.workspacePaths
+      paths: config.workspacePaths,
     });
     await fileWatcher.start();
 
@@ -121,7 +109,7 @@ export async function setupProviders(
             try {
               await provider.stop();
               config.logger.info("Provider stopped", {
-                providerIndex: reversedProviders.length - index
+                providerIndex: reversedProviders.length - index,
               });
             } catch (error) {
               config.logger.error("Error stopping provider", { error });
@@ -137,7 +125,7 @@ export async function setupProviders(
     };
 
     config.logger.info("Task management setup complete", {
-      providerCount: providers.length
+      providerCount: providers.length,
     });
 
     return {
