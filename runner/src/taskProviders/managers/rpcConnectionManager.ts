@@ -10,7 +10,6 @@ import {
 } from "vscode-jsonrpc/node";
 import { Logger } from "winston";
 
-
 import { pathToUri } from "../../utils/paths";
 import {
   InitializeParams,
@@ -25,8 +24,12 @@ import {
   DidOpenTextDocumentParams,
   DidCloseTextDocumentNotification,
   DidCloseTextDocumentParams,
+  DidSaveTextDocumentNotification,
+  DidSaveTextDocumentParams,
+  DidChangeWatchedFilesNotification,
+  DidChangeWatchedFilesParams,
+  FileEvent,
 } from "../types/lsp";
-
 
 /**
  * RPC client connection manager with some lsp specific helpers
@@ -36,9 +39,7 @@ export class RPCConnectionManager {
   private documentVersions = new Map<string, number>();
   private openedDocuments = new Set<string>();
 
-  constructor(private readonly logger: Logger) {
-    this.logger = logger.child({ module: 'LSPConnectionManager' });
-  }
+  constructor(private readonly logger: Logger) {}
 
   async connectToPipe(pipeName: string): Promise<MessageConnection> {
     const socket = net.createConnection(pipeName);
@@ -78,7 +79,7 @@ export class RPCConnectionManager {
 
   async sendRequest<TParams, TResult>(
     requestType: RequestType<TParams, TResult, Error>,
-    params: TParams
+    params: TParams,
   ): Promise<TResult> {
     if (!this.connection) {
       throw new Error("Not connected to LSP server");
@@ -88,7 +89,7 @@ export class RPCConnectionManager {
 
   async sendNotification<TParams>(
     notificationType: NotificationType<TParams>,
-    params: TParams
+    params: TParams,
   ): Promise<void> {
     if (!this.connection) {
       throw new Error("Not connected to LSP server");
@@ -98,7 +99,7 @@ export class RPCConnectionManager {
 
   onRequest<TParams, TResult>(
     requestType: RequestType<TParams, TResult, Error>,
-    handler: (params: TParams) => Promise<TResult> | TResult
+    handler: (params: TParams) => Promise<TResult> | TResult,
   ): void {
     if (!this.connection) {
       throw new Error("Not connected to LSP server");
@@ -110,8 +111,11 @@ export class RPCConnectionManager {
     return this.connection !== undefined;
   }
 
-
-  async openTextDocument(filePath: string, fileContent: string, languageId: string = "java"): Promise<void> {
+  async openTextDocument(
+    filePath: string,
+    fileContent: string,
+    languageId: string = "java",
+  ): Promise<void> {
     if (!this.connection) {
       throw new Error("Not connected to LSP server");
     }
@@ -119,7 +123,9 @@ export class RPCConnectionManager {
     const uri = pathToUri(filePath);
 
     if (this.openedDocuments.has(uri)) {
-      this.logger.debug("Document already opened, skipping open notification", { uri });
+      this.logger.debug("Document already opened, skipping open notification", {
+        uri,
+      });
       return;
     }
 
@@ -133,14 +139,21 @@ export class RPCConnectionManager {
         languageId,
         version,
         text: fileContent,
-      }
+      },
     };
 
     await this.sendNotification(DidOpenTextDocumentNotification, params);
-    this.logger.silly("Opened document in LSP server", { uri, languageId, version });
+    this.logger.silly("Opened document in LSP server", {
+      uri,
+      languageId,
+      version,
+    });
   }
 
-  async changeTextDocument(filePath: string, fileContent: string): Promise<void> {
+  async changeTextDocument(
+    filePath: string,
+    fileContent: string,
+  ): Promise<void> {
     if (!this.connection) {
       throw new Error("Not connected to LSP server");
     }
@@ -148,7 +161,10 @@ export class RPCConnectionManager {
     const uri = pathToUri(filePath);
 
     if (!this.openedDocuments.has(uri)) {
-      this.logger.debug("Document not opened, cannot send change notification", { uri });
+      this.logger.debug(
+        "Document not opened, cannot send change notification",
+        { uri },
+      );
       return;
     }
 
@@ -164,13 +180,19 @@ export class RPCConnectionManager {
       contentChanges: [
         {
           text: fileContent,
-        }
-      ]
+        },
+      ],
     };
 
-    this.logger.silly("Notifying LSP server of document change", { uri, version: newVersion });
+    this.logger.silly("Notifying LSP server of document change", {
+      uri,
+      version: newVersion,
+    });
     await this.sendNotification(DidChangeTextDocumentNotification, params);
-    this.logger.silly("Notified LSP server of document change", { uri, version: newVersion });
+    this.logger.silly("Notified LSP server of document change", {
+      uri,
+      version: newVersion,
+    });
   }
 
   async closeTextDocument(filePath: string): Promise<void> {
@@ -181,12 +203,14 @@ export class RPCConnectionManager {
     const uri = pathToUri(filePath);
 
     if (!this.openedDocuments.has(uri)) {
-      this.logger.debug("Document not opened, skipping close notification", { uri });
+      this.logger.debug("Document not opened, skipping close notification", {
+        uri,
+      });
       return;
     }
 
     const params: DidCloseTextDocumentParams = {
-      textDocument: { uri }
+      textDocument: { uri },
     };
 
     this.logger.silly("Notifying LSP server of document close", { uri });
@@ -195,6 +219,56 @@ export class RPCConnectionManager {
 
     this.openedDocuments.delete(uri);
     this.documentVersions.delete(uri);
+  }
+
+  async saveTextDocument(
+    filePath: string,
+    fileContent?: string,
+  ): Promise<void> {
+    if (!this.connection) {
+      throw new Error("Not connected to LSP server");
+    }
+
+    const uri = pathToUri(filePath);
+
+    if (!this.openedDocuments.has(uri)) {
+      this.logger.debug("Document not opened, cannot send save notification", {
+        uri,
+      });
+      return;
+    }
+
+    const params: DidSaveTextDocumentParams = {
+      textDocument: { uri },
+      text: fileContent,
+    };
+
+    this.logger.silly("Notifying LSP server of document save", { uri });
+    await this.sendNotification(DidSaveTextDocumentNotification, params);
+    this.logger.silly("Notified LSP server of document save", { uri });
+  }
+
+  async notifyFileChanges(fileEvents: FileEvent[]): Promise<void> {
+    if (!this.connection) {
+      throw new Error("Not connected to LSP server");
+    }
+
+    if (fileEvents.length === 0) {
+      return;
+    }
+
+    const params: DidChangeWatchedFilesParams = {
+      changes: fileEvents,
+    };
+
+    this.logger.silly("Notifying LSP server of file changes", {
+      changeCount: fileEvents.length,
+      changes: fileEvents,
+    });
+    await this.sendNotification(DidChangeWatchedFilesNotification, params);
+    this.logger.silly("Notified LSP server of file changes", {
+      changeCount: fileEvents.length,
+    });
   }
 
   async disconnect(): Promise<void> {

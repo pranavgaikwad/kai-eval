@@ -1,6 +1,10 @@
 import { Logger } from "winston";
 
-import { KaiWorkflowManager, SupportedModelProviders } from "../kai";
+import {
+  FilterTasksFunction,
+  KaiWorkflowManager,
+  SupportedModelProviders,
+} from "../kai";
 import { TaskManager } from "../taskManager";
 import {
   JavaDiagnosticsInitParams,
@@ -9,6 +13,7 @@ import {
   AnalyzerInitParams,
 } from "../taskProviders";
 
+// Consolidated config to setup a Kai workflow for fix generation
 export interface KaiWorkflowSetupConfig {
   workspaceDir: string;
   logger: Logger;
@@ -20,13 +25,15 @@ export interface KaiWorkflowSetupConfig {
   env?: Record<string, string>;
   solutionServerUrl?: string;
   logDir: string;
+  filterTasksFunc?: FilterTasksFunction; // function to filter tasks for user interaction
 }
-
+// Result of setting up a Kai workflow for fix generation
 export interface KaiWorkflowSetupResult {
   kaiWorkflowManager: KaiWorkflowManager;
   shutdown: () => Promise<void>;
 }
 
+// Consolidated config to setup task providers
 export interface TaskProviderSetupConfig {
   workspacePaths: string[];
   logger: Logger;
@@ -36,7 +43,7 @@ export interface TaskProviderSetupConfig {
     "pipePath" | "excludedPaths" | "workspacePaths"
   >;
 }
-
+// Result of setting up task providers
 export interface TaskProviderSetupResult {
   providers: {
     diagnostics?: JavaDiagnosticsTasksProvider;
@@ -45,7 +52,7 @@ export interface TaskProviderSetupResult {
   shutdown: () => Promise<void>;
 }
 
-// Kai Runner Setup to run fix generation workflow
+// Consolidated result of setting up a Kai runner for fix generation workflow
 export interface KaiRunnerSetupResult {
   logger: Logger;
   providersSetup: TaskProviderSetupResult;
@@ -55,6 +62,7 @@ export interface KaiRunnerSetupResult {
   shutdown: () => Promise<void>;
 }
 
+// Input to run a Kai workflow for fix generation
 export type RunKaiWorkflowInput = {
   kind: "fixByRules";
   data: {

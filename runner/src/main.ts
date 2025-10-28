@@ -2,8 +2,7 @@
 
 import { program } from "commander";
 
-import { SupportedModelProviders } from "./kai";
-import { setupKaiRunner } from "./cli";
+import { setupKaiRunner } from "./setup";
 import { KaiRunnerConfig } from "./types";
 import { loadConfig, loadEnv } from "./utils/config";
 
@@ -16,7 +15,6 @@ async function main(): Promise<void> {
     .option("--log-level <level>", "Log level (error|warn|info|debug|silly)")
     .option("--log-dir <path>", "Directory for log files")
     .option("--workspace-paths <paths>", "Comma-separated workspace paths")
-    .option("--model-provider <provider>", "Model provider to use")
     .option("--jdtls-binary-path <path>", "Path to JDTLS binary")
     .option("--jdtls-bundles <bundles>", "Comma-separated JDTLS bundle paths")
     .option("--jvm-max-mem <memory>", "Maximum JVM memory (e.g., 4g, 2048m)")
@@ -43,7 +41,6 @@ async function main(): Promise<void> {
       },
       logDir: options.logDir,
       workspacePaths: options.workspacePaths?.split(","),
-      modelProvider: options.modelProvider as SupportedModelProviders,
       jdtlsBinaryPath: options.jdtlsBinaryPath,
       jdtlsBundles: options.jdtlsBundles?.split(","),
       jvmMaxMem: options.jvmMaxMem,

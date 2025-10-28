@@ -14,6 +14,7 @@ export async function setupProviders(
   if (!config.workspacePaths || config.workspacePaths.length === 0) {
     throw new Error("basePaths must be provided and non-empty");
   }
+  config.logger = config.logger.child({ module: "ProvidersSetup" });
 
   const fileWatcher = SharedFileWatcher.getInstance(
     config.logger,

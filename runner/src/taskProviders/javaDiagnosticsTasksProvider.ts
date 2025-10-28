@@ -12,14 +12,15 @@ import {
 import { DiagnosticTask, DiagnosticTaskFactory } from "./tasks";
 import {
   TaskProvider,
-  Task,
   BaseInitParams,
   Diagnostic,
   InitializeParams,
+  VersionedTasks,
 } from "./types";
 import { EventDebouncer } from "../utils/eventDebouncer";
 import { FileWatchCapable, FileChangeEvent } from "../utils/fsWatch";
 import { pathToUri } from "../utils/paths";
+import { FileEvent, FileChangeType } from "./types/lsp";
 
 export interface JavaDiagnosticsInitParams extends BaseInitParams {
   jdtlsBinaryPath: string;
@@ -37,7 +38,8 @@ export class JavaDiagnosticsTasksProvider
     FileWatchCapable,
     TaskProvider<JavaDiagnosticsInitParams, JavaDiagnosticsInitResult>
 {
-  private readonly connectionManager: RPCConnectionManager;
+  readonly name = "java-diagnostics";
+  private readonly jdtlsConnectionManager: RPCConnectionManager;
   private readonly diagnosticsManager: TasksStoreManager<
     Diagnostic,
     DiagnosticTask
@@ -49,10 +51,12 @@ export class JavaDiagnosticsTasksProvider
   private diagnosticsUpdatePromise?: {
     resolve: () => void;
     timeout: NodeJS.Timeout;
+    expectedUris: Set<string>;
+    receivedUris: Set<string>;
   };
 
   constructor(private readonly logger: Logger) {
-    this.connectionManager = new RPCConnectionManager(
+    this.jdtlsConnectionManager = new RPCConnectionManager(
       logger.child({ module: "JavaLSPConnectionManager" }),
     );
     this.diagnosticsManager = new TasksStoreManager(
@@ -79,9 +83,10 @@ export class JavaDiagnosticsTasksProvider
     const javaExecutable = await this.getJavaExecutable();
     const jdtlsArgs = await this.buildJdtlsArgs(params);
     const logDir = params.logDir || path.join(os.tmpdir(), "jdtls-logs");
+    const jdtlsCwd = path.join(logDir, "jdtls-wd");
     this.logger.info("Spawning JDTLS process", { logDir });
     try {
-      await fs.mkdir(logDir, { recursive: true });
+      await fs.mkdir(jdtlsCwd, { recursive: true });
     } catch (error) {
       throw new Error(`Failed to create log directory: ${logDir} - ${error}`);
     }
@@ -89,7 +94,7 @@ export class JavaDiagnosticsTasksProvider
       javaExecutable,
       jdtlsArgs,
       {
-        cwd: logDir,
+        cwd: jdtlsCwd,
         onExit: () => {
           this.initialized = false;
         },
@@ -117,21 +122,46 @@ export class JavaDiagnosticsTasksProvider
     if (!pipeName) {
       throw new Error("Failed to spawn process and create pipe");
     }
-    await this.connectionManager.connectToPipe(pipeName);
-    this.connectionManager.onDiagnostics((params) => {
+    await this.jdtlsConnectionManager.connectToPipe(pipeName);
+    this.jdtlsConnectionManager.onDiagnostics((params) => {
       this.diagnosticsManager.updateData(params.uri, params.diagnostics);
 
-      // Resolve any pending diagnostics update promise
+      // Handle pending diagnostics update promise
       if (this.diagnosticsUpdatePromise) {
-        clearTimeout(this.diagnosticsUpdatePromise.timeout);
-        this.diagnosticsUpdatePromise.resolve();
-        this.diagnosticsUpdatePromise = undefined;
+        // Only track URIs we're explicitly waiting for
+        if (this.diagnosticsUpdatePromise.expectedUris.has(params.uri)) {
+          this.diagnosticsUpdatePromise.receivedUris.add(params.uri);
+
+          this.logger.silly("Received diagnostics update", {
+            uri: params.uri,
+            receivedCount: this.diagnosticsUpdatePromise.receivedUris.size,
+            expectedCount: this.diagnosticsUpdatePromise.expectedUris.size,
+            expectedUris: Array.from(
+              this.diagnosticsUpdatePromise.expectedUris,
+            ),
+            receivedUris: Array.from(
+              this.diagnosticsUpdatePromise.receivedUris,
+            ),
+          });
+
+          // Check if we've received all expected updates
+          if (
+            this.diagnosticsUpdatePromise.receivedUris.size >=
+            this.diagnosticsUpdatePromise.expectedUris.size
+          ) {
+            clearTimeout(this.diagnosticsUpdatePromise.timeout);
+            this.diagnosticsUpdatePromise.resolve();
+            this.diagnosticsUpdatePromise = undefined;
+          }
+        }
       }
     });
     const initParams = await this.buildJavaInitializeParams(params);
     this.logger.debug("Sending initialize request to LSP server");
-    await this.connectionManager.sendInitialize(initParams);
+    await this.jdtlsConnectionManager.sendInitialize(initParams);
     this.logger.debug("Initialize request sent to LSP server");
+    // wait for initial diagnostics to come in
+    await this.waitForDiagnosticsPromise();
     this.initialized = true;
     return { pipeName };
   }
@@ -140,13 +170,13 @@ export class JavaDiagnosticsTasksProvider
     return this.initialized;
   }
 
-  async getCurrentTasks(): Promise<Task[]> {
+  async getCurrentTasks(): Promise<VersionedTasks> {
     await this.debouncer.waitUntilIdle();
     return this.diagnosticsManager.getAllTasks();
   }
 
   async stop(): Promise<void> {
-    await this.connectionManager.disconnect();
+    await this.jdtlsConnectionManager.disconnect();
     await this.processManager.terminate();
 
     if (this.pipeName) {
@@ -158,6 +188,50 @@ export class JavaDiagnosticsTasksProvider
 
   async onFileChange(event: FileChangeEvent): Promise<void> {
     this.debouncer.addEvent(event);
+  }
+
+  /**
+   * Wait for diagnostics updates for specific URIs to be received.
+   *
+   * @param expectedUris Array of URIs to wait for diagnostics updates
+   * @param timeoutMs Timeout in milliseconds (default: 5000)
+   * @returns Promise that resolves when expected updates are received or timeout occurs
+   */
+  async waitForDiagnosticsUpdates(
+    expectedUris: string[],
+    timeoutMs: number = 5000,
+  ): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const expectedUrisSet = new Set(expectedUris);
+      const timeout = setTimeout(() => {
+        this.logger.debug("Diagnostics update timeout reached", {
+          receivedCount: this.diagnosticsUpdatePromise?.receivedUris.size || 0,
+          expectedCount: expectedUrisSet.size,
+          expectedUris,
+          receivedUris: Array.from(
+            this.diagnosticsUpdatePromise?.receivedUris || [],
+          ),
+        });
+
+        if (this.diagnosticsUpdatePromise !== undefined) {
+          this.diagnosticsUpdatePromise = undefined;
+        }
+        resolve();
+      }, timeoutMs);
+
+      this.diagnosticsUpdatePromise = {
+        resolve,
+        timeout,
+        expectedUris: expectedUrisSet,
+        receivedUris: new Set<string>(),
+      };
+
+      this.logger.debug("Waiting for diagnostics updates", {
+        expectedUris,
+        expectedCount: expectedUrisSet.size,
+        timeoutMs,
+      });
+    });
   }
 
   private async validateInitParams(
@@ -361,18 +435,9 @@ export class JavaDiagnosticsTasksProvider
     });
     try {
       await this.notifyFileChanges(events);
-      // wait for diagnostics to be updated
-      await new Promise<void>((resolve) => {
-        const timeout = setTimeout(() => {
-          if (this.diagnosticsUpdatePromise === undefined) {
-            resolve();
-          } else {
-            this.diagnosticsUpdatePromise = undefined;
-            resolve();
-          }
-        }, 5000);
-        this.diagnosticsUpdatePromise = { resolve, timeout };
-      });
+      // Wait for diagnostics to be updated for each file that was changed
+      const expectedUris = events.map((event) => pathToUri(event.path));
+      await this.waitForDiagnosticsPromise(expectedUris);
       this.logger.debug(
         "File changes processed and Java diagnostics refreshed",
       );
@@ -382,43 +447,39 @@ export class JavaDiagnosticsTasksProvider
   }
 
   private async notifyFileChanges(events: FileChangeEvent[]): Promise<void> {
-    for (const event of events) {
-      try {
+    try {
+      const fileEvents: FileEvent[] = events.map((event) => {
+        let changeType: FileChangeType;
         switch (event.type) {
           case "created":
-            await this.connectionManager.openTextDocument(
-              event.path,
-              await fs.readFile(event.path, "utf-8"),
-            );
+            changeType = FileChangeType.Created;
             break;
-          case "modified": {
-            const fileContent = await fs.readFile(event.path, "utf-8");
-            await this.connectionManager.openTextDocument(
-              event.path,
-              fileContent,
-            );
-            await this.connectionManager.changeTextDocument(
-              event.path,
-              fileContent,
-            );
+          case "modified":
+            changeType = FileChangeType.Changed;
             break;
-          }
           case "deleted":
-            await this.connectionManager.closeTextDocument(event.path);
+            changeType = FileChangeType.Deleted;
             break;
           default:
             this.logger.warn("Unknown file change event type", {
               type: event.type,
               path: event.path,
             });
+            changeType = FileChangeType.Changed; // Default fallback
         }
-      } catch (error) {
-        this.logger.warn("Failed to notify file change", {
-          path: event.path,
-          type: event.type,
-          error,
-        });
-      }
+
+        return {
+          uri: pathToUri(event.path),
+          type: changeType,
+        };
+      });
+
+      await this.jdtlsConnectionManager.notifyFileChanges(fileEvents);
+      this.logger.debug("Notified file changes to LSP server", {
+        changeCount: fileEvents.length,
+      });
+    } catch (error) {
+      this.logger.warn("Failed to notify file changes", { error });
     }
   }
 
@@ -452,5 +513,41 @@ export class JavaDiagnosticsTasksProvider
       }
     });
     return Array.from(eventMap.values());
+  }
+
+  private waitForDiagnosticsPromise(
+    expectedUris: string[] = [],
+  ): Promise<void> {
+    // Wait for expected URIs diagnostics updates or timeout after 5 seconds
+    return new Promise<void>((resolve) => {
+      const expectedUrisSet = new Set(expectedUris);
+      const timeout = setTimeout(() => {
+        this.logger.debug("Diagnostics update timeout reached", {
+          receivedCount: this.diagnosticsUpdatePromise?.receivedUris.size || 0,
+          expectedCount: expectedUrisSet.size,
+          expectedUris,
+          receivedUris: Array.from(
+            this.diagnosticsUpdatePromise?.receivedUris || [],
+          ),
+        });
+
+        if (this.diagnosticsUpdatePromise !== undefined) {
+          this.diagnosticsUpdatePromise = undefined;
+        }
+        resolve();
+      }, 5000);
+
+      this.diagnosticsUpdatePromise = {
+        resolve,
+        timeout,
+        expectedUris: expectedUrisSet,
+        receivedUris: new Set<string>(),
+      };
+
+      this.logger.debug("Waiting for diagnostics updates", {
+        expectedUris,
+        expectedCount: expectedUrisSet.size,
+      });
+    });
   }
 }

@@ -4,11 +4,9 @@ import { execSync } from "child_process";
 
 import { Logger } from "winston";
 
-import { setupKaiRunner, KaiRunnerSetupResult } from "../src/cli";
+import { setupKaiRunner, KaiRunnerSetupResult } from "../src/setup";
 import { createOrderedLogger } from "../src/utils/logger";
 import { getConfig } from "../src/utils/config";
-import { KaiInteractiveWorkflowInput } from "@editor-extensions/agentic";
-import { EnhancedIncident } from "@editor-extensions/shared";
 
 describe("KaiRunner Integration Tests", () => {
   let logger: Logger;
@@ -25,7 +23,14 @@ describe("KaiRunner Integration Tests", () => {
       });
       testDataPath = path.resolve(__dirname, "test-data");
 
-      const logDir = path.join(testDataPath, "logs");
+      const logDir = path.join(
+        testDataPath,
+        "logs",
+        `kai-runner-test-${new Date()
+          .toISOString()
+          .replace(/[-:]/g, "")
+          .replace(/\.\d+Z$/, "Z")}`,
+      );
 
       logger = createOrderedLogger(
         config.logLevel?.console || "error",
@@ -62,8 +67,8 @@ describe("KaiRunner Integration Tests", () => {
         throw new Error("Kai analyzer RPC path not configured in .config.json");
       }
 
-      if (!config.modelProvider) {
-        throw new Error("Model provider not configured in .config.json");
+      if (!config.models || config.models.length === 0) {
+        throw new Error("Models not configured in .config.json");
       }
 
       kaiRunnerSetup = await setupKaiRunner(
@@ -76,19 +81,20 @@ describe("KaiRunner Integration Tests", () => {
           logDir,
         },
         env,
+        true,
       );
 
       logger.info("KaiRunner setup completed");
     } catch (error) {
       setupError = error as Error;
       logger?.error("Setup failed, attempting cleanup", { error });
-      shutdown(logger, kaiRunnerSetup, coolstoreProjectPath);
+      await shutdown(logger, kaiRunnerSetup, coolstoreProjectPath);
       throw setupError;
     }
   }, 180000); // 3 minutes timeout for setup
 
   afterEach(async () => {
-    shutdown(logger, kaiRunnerSetup, coolstoreProjectPath);
+    await shutdown(logger, kaiRunnerSetup, coolstoreProjectPath);
   });
 
   it("should successfully setup KaiRunner with all components initialized", async () => {
@@ -127,7 +133,7 @@ describe("KaiRunner Integration Tests", () => {
     });
 
     logger.info("KaiRunner setup test completed successfully");
-  }, 900000); // 15 minutes timeout for test execution
+  }, 1200000); // 20 minutes timeout for test execution
 });
 
 async function shutdown(
@@ -144,9 +150,11 @@ async function shutdown(
     }
   }
 
-  // try {
-  //   await fs.rm(coolstoreProjectPath, { recursive: true, force: true });
-  // } catch (error) {
-  //   logger?.warn("Failed to clean up coolstore directory", { error });
-  // }
+  if (process.env.TEST_NO_CLEANUP !== "true") {
+    try {
+      await fs.rm(coolstoreProjectPath, { recursive: true, force: true });
+    } catch (error) {
+      logger?.warn("Failed to clean up coolstore directory", { error });
+    }
+  }
 }

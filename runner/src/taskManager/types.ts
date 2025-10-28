@@ -3,7 +3,7 @@ import { Task } from "../taskProviders";
 export interface TaskSnapshot {
   id: number;
   timestamp: Date;
-  tasks: Map<string, Task>;
+  providerGenerationIDs: Map<string, number>;
 }
 
 export interface TaskSnapshotDiff {

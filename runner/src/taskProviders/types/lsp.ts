@@ -148,3 +148,31 @@ export interface DidCloseTextDocumentParams {
 export const DidCloseTextDocumentNotification = new NotificationType<DidCloseTextDocumentParams>(
   "textDocument/didClose",
 );
+
+export interface DidSaveTextDocumentParams {
+  textDocument: TextDocumentIdentifier;
+  text?: string;
+}
+
+export const DidSaveTextDocumentNotification = new NotificationType<DidSaveTextDocumentParams>(
+  "textDocument/didSave",
+);
+
+export interface DidChangeWatchedFilesParams {
+  changes: FileEvent[];
+}
+
+export interface FileEvent {
+  uri: string;
+  type: FileChangeType;
+}
+
+export enum FileChangeType {
+  Created = 1,
+  Changed = 2,
+  Deleted = 3,
+}
+
+export const DidChangeWatchedFilesNotification = new NotificationType<DidChangeWatchedFilesParams>(
+  "workspace/didChangeWatchedFiles",
+);

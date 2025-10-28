@@ -29,20 +29,14 @@ import { ChatOllama } from "@langchain/ollama";
 import { AzureChatOpenAI, ChatOpenAI } from "@langchain/openai";
 import { Logger } from "winston";
 
-export type SupportedModelProviders =
-  | "AzureChatOpenAI"
-  | "ChatBedrock"
-  | "ChatDeepSeek"
-  | "ChatGoogleGenerativeAI"
-  | "ChatOllama"
-  | "ChatOpenAI";
+import { SupportedModelProviders } from "./types";
 
-export interface ModelCapabilities {
+interface ModelCapabilities {
   supportsTools: boolean;
   supportsToolsInStreaming: boolean;
 }
 
-export interface ModelProviderOptions {
+interface ModelProviderOptions {
   streamingModel: BaseChatModel;
   nonStreamingModel: BaseChatModel;
   capabilities: ModelCapabilities;

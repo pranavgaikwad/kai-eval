@@ -1,7 +1,6 @@
 import * as os from "os";
 import * as path from "path";
 
-import { KaiInteractiveWorkflowInput } from "@editor-extensions/agentic";
 import { EnhancedIncident } from "@editor-extensions/shared";
 
 import { setupKaiWorkflow } from "./kaiWorkflow";
@@ -12,6 +11,7 @@ import {
   KaiRunnerSetupResult,
   RunKaiWorkflowInput,
 } from "./types";
+import { FilterTasksFunction } from "../kai";
 import { TaskManager } from "../taskManager";
 import { AnalysisTask } from "../taskProviders";
 import { KaiRunnerConfig } from "../types";
@@ -20,14 +20,16 @@ import { createOrderedLogger } from "../utils/logger";
 export async function setupKaiRunner(
   config: KaiRunnerConfig,
   env: Record<string, string> = process.env as Record<string, string>,
+  storeSnapshots: boolean = false,
+  filterTasksFunc?: FilterTasksFunction,
 ): Promise<KaiRunnerSetupResult> {
   // Validate required configuration
   if (!config.workspacePaths || config.workspacePaths.length === 0) {
     throw new Error("workspacePaths must be provided in config");
   }
 
-  if (!config.modelProvider) {
-    throw new Error("modelProvider must be specified in config");
+  if (!config.models || config.models.length === 0) {
+    throw new Error("models must be specified in config");
   }
 
   // TODO (pgaikwad): re-visit when adding multi-workspace support
@@ -82,10 +84,12 @@ export async function setupKaiRunner(
 
   // Step 2: Setup task manager
   logger.info("Setting up task manager");
-  const taskManager = new TaskManager(logger, [
-    providersSetup.providers.analysis,
-    providersSetup.providers.diagnostics,
-  ]);
+  const taskManager = new TaskManager(
+    logger,
+    [providersSetup.providers.analysis, providersSetup.providers.diagnostics],
+    logDir,
+    storeSnapshots,
+  );
 
   // Step 3: Setup Kai workflow manager
   logger.info("Setting up Kai workflow manager");
@@ -95,12 +99,13 @@ export async function setupKaiRunner(
     logger,
     taskManager,
     modelConfig: {
-      provider: config.modelProvider,
-      args: config.modelArgs || {},
+      provider: config.models[0].provider,
+      args: config.models[0].args,
     },
     env,
     solutionServerUrl: config.solutionServerUrl,
     logDir,
+    filterTasksFunc,
   };
 
   const kaiSetup = await setupKaiWorkflow(kaiConfig);
@@ -121,15 +126,23 @@ export async function setupKaiRunner(
 
   const runFunc = async function (inp: RunKaiWorkflowInput): Promise<void> {
     // get analysis tasks and ensure given issues are present in analysis tasks
-    const allTasks = await taskManager.getTasks();
-    if (!allTasks || !allTasks.added.length) {
+    const snapshotId = await taskManager.getTasks();
+    const compareResult = taskManager.getTasksDiff(snapshotId);
+    if (
+      !compareResult ||
+      (!compareResult.added.length && !compareResult.unresolved.length)
+    ) {
       throw new Error("No analysis tasks found");
     }
     // filter tasks of type AnalysisTask
-    const analysisTasks: AnalysisTask[] = allTasks.added.filter(
+    const analysisTasks: AnalysisTask[] = compareResult.added.filter(
       (task) => task instanceof AnalysisTask,
     );
-    const foundAnalysisTasks = analysisTasks.filter((task) =>
+    const unresolvedAnalysisTasks = compareResult.unresolved.filter(
+      (task) => task instanceof AnalysisTask,
+    );
+    const allTasks = [...analysisTasks, ...unresolvedAnalysisTasks];
+    const foundAnalysisTasks = allTasks.filter((task) =>
       inp.data.rules.some(
         (rule) =>
           rule.rule === task.getIncident().rule &&

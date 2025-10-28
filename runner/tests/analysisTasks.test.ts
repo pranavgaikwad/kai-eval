@@ -4,7 +4,7 @@ import { execSync } from "child_process";
 
 import { Logger } from "winston";
 
-import { setupProviders, TaskProviderSetupConfig } from "../src/cli";
+import { setupProviders, TaskProviderSetupConfig } from "../src/setup";
 import { createOrderedLogger } from "../src/utils/logger";
 import { getConfig } from "../src/utils/config";
 
@@ -20,7 +20,14 @@ describe("AnalysisTasksProvider Integration Tests", () => {
     });
     testDataPath = path.resolve(__dirname, "test-data");
 
-    const logDir = path.join(testDataPath, "logs");
+    const logDir = path.join(
+      testDataPath,
+      "logs",
+      `analysis-tasks-test-${new Date()
+        .toISOString()
+        .replace(/[-:]/g, "")
+        .replace(/\.\d+Z$/, "Z")}`,
+    );
 
     logger = createOrderedLogger(
       config.logLevel?.console || "error",
@@ -95,7 +102,7 @@ describe("AnalysisTasksProvider Integration Tests", () => {
       }
     }
 
-    if (process.env.NODE_ENV !== "test-failed") {
+    if (process.env.TEST_NO_CLEANUP !== "true") {
       try {
         await fs.rm(coolstoreProjectPath, { recursive: true, force: true });
       } catch (error) {
@@ -123,7 +130,8 @@ describe("AnalysisTasksProvider Integration Tests", () => {
     if (!analysisProvider || !analysisProvider.isInitialized()) {
       throw new Error("Analysis provider not initialized");
     }
-    const initialAnalysisTasks = await analysisProvider.getCurrentTasks();
+    const { tasks: initialAnalysisTasks } =
+      await analysisProvider.getCurrentTasks();
     expect(Array.isArray(initialAnalysisTasks)).toBe(true);
     expect(initialAnalysisTasks.length).toBeGreaterThan(150);
     logger.info("Analysis tasks retrieved", {
@@ -195,7 +203,8 @@ describe("AnalysisTasksProvider Integration Tests", () => {
     await fs.writeFile(beansXmlPath, beansXmlUpdate, "utf-8");
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    const newAnalysisTasks = await analysisProvider.getCurrentTasks();
+    const { tasks: newAnalysisTasks } =
+      await analysisProvider.getCurrentTasks();
     const incidentsInBeansXmlAfter = newAnalysisTasks.filter(
       (task) => task.getUri() === beansXmlPath,
     );
@@ -229,7 +238,8 @@ describe("AnalysisTasksProvider Integration Tests", () => {
       "utf-8",
     );
     await new Promise((resolve) => setTimeout(resolve, 2000));
-    const analysisTasksAfterReset = await analysisProvider.getCurrentTasks();
+    const { tasks: analysisTasksAfterReset } =
+      await analysisProvider.getCurrentTasks();
     const incidentsInBeansXmlAfterReset = analysisTasksAfterReset.filter(
       (task) => task.getUri() === beansXmlPath,
     );

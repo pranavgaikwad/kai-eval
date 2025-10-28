@@ -15,9 +15,9 @@ import {
   AnalysisIncident,
   AnalysisRuleSet,
   TriggerAnalysisEvent,
-  Task,
   TaskProvider,
   BaseInitParams,
+  VersionedTasks,
 } from "./types";
 import { EventDebouncer } from "../utils/eventDebouncer";
 import { FileWatchCapable, FileChangeEvent } from "../utils/fsWatch";
@@ -85,6 +85,7 @@ export type AnalysisEvent =
 export class AnalysisTasksProvider
   implements FileWatchCapable, TaskProvider<AnalyzerInitParams, void>
 {
+  readonly name = "analysis";
   private readonly processManager: ProcessManager;
   private readonly connectionManager: RPCConnectionManager;
   private readonly jdtlsConnectionManager: RPCConnectionManager;
@@ -95,6 +96,7 @@ export class AnalysisTasksProvider
   >;
   private initParams: AnalyzerInitParams | null = null;
   private isServerRunning = false;
+  private analysisReportDir: string = path.join(os.tmpdir(), "analyses");
 
   constructor(private readonly logger: Logger) {
     this.processManager = new ProcessManager(
@@ -134,9 +136,11 @@ export class AnalysisTasksProvider
         timestamp: new Date(),
       } as TriggerAnalysisEvent,
     });
+    this.analysisReportDir = path.join(this.initParams.logDir, "analyses");
+    await fsPromises.mkdir(this.analysisReportDir, { recursive: true });
   }
 
-  async getCurrentTasks(): Promise<Task[]> {
+  async getCurrentTasks(): Promise<VersionedTasks> {
     await this.debouncer.waitUntilIdle(180000);
     return this.analysisTasksManager.getAllTasks();
   }
@@ -473,9 +477,10 @@ export class AnalysisTasksProvider
         .toISOString()
         .replace(/[-:]/g, "")
         .replace(/\.\d+Z$/, "Z");
+
       await this.writeAnalysisResult(
         result,
-        path.join(this.initParams.logDir, `analysis_${formattedDate}.json`),
+        path.join(this.analysisReportDir, `analysis_${formattedDate}.json`),
       );
     } catch (error) {
       this.logger.error("Analysis request failed", { error });
@@ -485,18 +490,18 @@ export class AnalysisTasksProvider
 
   private async writeAnalysisResult(
     result: AnalyzeResult,
-    path: string,
+    fPath: string,
   ): Promise<void> {
     try {
       await fsPromises.writeFile(
-        path,
+        fPath,
         JSON.stringify(result, null, 2),
         "utf-8",
       );
     } catch (error) {
       this.logger.error("Failed to write analysis result to file", {
         error,
-        path,
+        path: fPath,
       });
       throw error;
     }

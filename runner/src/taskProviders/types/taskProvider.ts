@@ -4,7 +4,7 @@ export interface TaskFactory<TData, TTask extends Task> {
 
 export interface Task {
   toString(): string;
-  toJSON(): Record<string, string|number|boolean|undefined>;
+  toJSON(): Record<string, string | number | boolean | undefined>;
   getID(): string;
   getUri(): string;
 }
@@ -13,9 +13,18 @@ export interface BaseInitParams {
   workspacePaths: string[];
 }
 
-export interface TaskProvider<TInitParams extends BaseInitParams = BaseInitParams, TInitResult = unknown> {
+export interface VersionedTasks {
+  generationId: number;
+  tasks: Task[];
+}
+
+export interface TaskProvider<
+  TInitParams extends BaseInitParams = BaseInitParams,
+  TInitResult = unknown,
+> {
+  name: string;
   init(params: TInitParams): Promise<TInitResult>;
   isInitialized(): boolean;
-  getCurrentTasks(): Promise<Task[]>;
+  getCurrentTasks(): Promise<VersionedTasks>;
   stop(): Promise<void>;
 }

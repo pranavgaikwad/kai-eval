@@ -5,11 +5,16 @@
   },
   "logDir": "/logs",
   "workspacePaths": ["/workspace"],
-  "modelProvider": "ChatOpenAI",
-  "modelArgs": {
-    "model": "gpt-4o",
-    "temperature": 0.1
-  },
+  "models": [
+    {
+      "provider": "ChatOpenAI",
+      "args": {
+        "model": "gpt-4o",
+        "temperature": 0.1
+      },
+      "useForEvaluation": true
+    }
+  ],
   "jdtlsBinaryPath": "/jdtls/bin/jdtls",
   "jdtlsBundles": ["/jdtls/java-analyzer-bundle/java-analyzer-bundle.core/target/java-analyzer-bundle.core-1.0.0-SNAPSHOT.jar"],
   "jvmMaxMem": "4g",

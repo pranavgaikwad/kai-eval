@@ -12,9 +12,13 @@ export interface KaiRunnerConfig {
   workspacePaths?: string[];
 
   // Model Configuration
-  modelProvider?: SupportedModelProviders;
-  modelArgs?: Record<string, unknown>;
+  models?: Array<{
+    provider: SupportedModelProviders;
+    args: Record<string, unknown>;
+    useForEvaluation?: boolean;
+  }>;
 
+  // Evaluation
   // Java Diagnostics
   jdtlsBinaryPath?: string;
   jdtlsBundles?: string[];

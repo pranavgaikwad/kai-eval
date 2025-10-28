@@ -8,10 +8,6 @@ import {
   KaiWorkflowMessage,
   KaiWorkflowMessageType,
   KaiWorkflowInitOptions,
-  KaiModelProvider,
-  SolutionServerClient,
-  InMemoryCacheWithRevisions,
-  FileBasedResponseCache,
   KaiUserInteraction,
   KaiModifiedFile,
   KaiUserInteractionMessage,
@@ -20,16 +16,11 @@ import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
 import { Logger } from "winston";
 
 import { TaskManager } from "../taskManager";
-import { getFilteredTasks } from "../utils/tasks";
-
-export interface KaiWorkflowManagerOptions {
-  logger: Logger;
-  workspaceDir: string;
-  modelProvider: KaiModelProvider;
-  solutionServerClient: SolutionServerClient;
-  fsCache: InMemoryCacheWithRevisions<string, string>;
-  toolCache: FileBasedResponseCache<Record<string, unknown>, string>;
-}
+import {
+  FilteredTask,
+  FilterTasksFunction,
+  KaiWorkflowManagerOptions,
+} from "./types";
 
 export class KaiWorkflowManager {
   private workflow: KaiInteractiveWorkflow;
@@ -45,6 +36,7 @@ export class KaiWorkflowManager {
   });
   private buffer: AIMessageChunk = this.defaultBuffer;
   private traceDir: string;
+  private filterTasksFunction: FilterTasksFunction = getFilteredTasks;
 
   constructor(
     private readonly logger: Logger,
@@ -75,6 +67,9 @@ export class KaiWorkflowManager {
       this.workspaceDir = options.workspaceDir;
       await this.workflow.init(initOptions);
       this.setupEventHandlers();
+      if (options.filterTasksFunc) {
+        this.filterTasksFunction = options.filterTasksFunc;
+      }
       this.isInitialized = true;
       this.logger.info("Kai workflow initialized successfully");
     } catch (error) {
@@ -254,10 +249,7 @@ export class KaiWorkflowManager {
   private async writeMessageToTrace(message: AIMessage): Promise<void> {
     try {
       const filepath = path.join(this.traceDir, `llm_responses.txt`);
-      await fs.appendFile(
-        filepath,
-        `${JSON.stringify(message.toJSON(), null, 2)}\n`,
-      );
+      await fs.appendFile(filepath, `---\n${message.content}\n`);
     } catch (error) {
       this.logger.warn("Failed to write message trace", {
         error,
@@ -287,7 +279,9 @@ export class KaiWorkflowManager {
         break;
       case "tasks":
         try {
-          const filteredTasks = await getFilteredTasks(this.taskManager, 3);
+          const filteredTasks = await this.filterTasksFunction(
+            this.taskManager,
+          );
           this.logger.info("Filtered tasks for user interaction", {
             messageId: message.id,
             taskCount: filteredTasks.length,
@@ -322,4 +316,39 @@ export class KaiWorkflowManager {
     this.logger.debug("Resolving user interaction", { updatedMsg });
     await this.workflow.resolveUserInteraction(updatedMsg);
   }
+}
+
+async function getFilteredTasks(
+  taskManager: TaskManager,
+): Promise<FilteredTask[]> {
+  const taskSnapshot = await taskManager.getTasks();
+  const compareResult = taskManager.getTasksDiff(taskSnapshot);
+  const currentTasks = Array.from(compareResult.added);
+
+  const filteredTasks = currentTasks.filter((task) => {
+    const frequency = taskManager.getTaskFrequency(
+      taskManager.getLatestSnapshotId(),
+      task.getID(),
+    );
+    return frequency < 3;
+  });
+
+  const seen = new Set<string>();
+  const uniqueTasks = filteredTasks.filter((task) => {
+    const key = `${task.getUri()}::${task.toString()}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+
+  return Array.from(
+    new Set(
+      uniqueTasks.map((task) => ({
+        uri: task.getUri(),
+        task: task.toString(),
+      })),
+    ),
+  );
 }

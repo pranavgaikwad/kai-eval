@@ -7,11 +7,16 @@
 
   "workspacePaths": ["/path/to/your/workspace"],
 
-  "modelProvider": "ChatOpenAI",
-  "modelArgs": {
-    "model": "gpt-4o",
-    "temperature": 0.1
-  },
+  "models": [
+    {
+      "provider": "ChatOpenAI",
+      "args": {
+        "model": "gpt-4o",
+        "temperature": 0.1
+      },
+      "useForEvaluation": true # optional
+    }
+  ],
 
   "jdtlsBinaryPath": "./vendor/jdtls/bin/jdtls",
   "jdtlsBundles": ["./vendor/jdtls/java-analyzer-bundle/java-analyzer-bundle.core/target/java-analyzer-bundle.core-1.0.0-SNAPSHOT.jar"],

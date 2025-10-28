@@ -1,22 +1,23 @@
 import { Logger } from "winston";
 
-import { Task, TaskFactory } from "../types/taskProvider";
+import { Task, TaskFactory, VersionedTasks } from "../types/taskProvider";
 
 export class TasksStoreManager<TData, TTask extends Task> {
   private readonly dataMap = new Map<string, TData[]>();
+  private generationId: number = 0;
 
   constructor(
     private readonly logger: Logger,
     private readonly taskFactory: TaskFactory<TData, TTask>,
-  ) {
-  }
+  ) {}
 
   updateData(uri: string, data: TData[]): void {
+    this.generationId++;
     this.logger.silly("Updating store with diagnostics data", {
       uri,
-      itemCount: data.length
+      itemCount: data.length,
+      generationId: this.generationId,
     });
-
     if (data.length === 0) {
       this.dataMap.delete(uri);
     } else {
@@ -24,7 +25,7 @@ export class TasksStoreManager<TData, TTask extends Task> {
     }
   }
 
-  getAllTasks(): TTask[] {
+  getAllTasks(): VersionedTasks {
     const tasks: TTask[] = [];
 
     for (const [uri, dataItems] of this.dataMap) {
@@ -33,7 +34,10 @@ export class TasksStoreManager<TData, TTask extends Task> {
       }
     }
 
-    return tasks;
+    return {
+      generationId: this.generationId,
+      tasks,
+    };
   }
 
   getTasksForFile(uri: string): TTask[] {

@@ -3,7 +3,6 @@ import {
   InMemoryCacheWithRevisions,
   FileBasedResponseCache,
 } from "@editor-extensions/agentic";
-import { SolutionServerConfig } from "@editor-extensions/shared";
 
 import { KaiWorkflowSetupConfig, KaiWorkflowSetupResult } from "./types";
 import {
@@ -78,6 +77,7 @@ export async function setupKaiWorkflow(
       solutionServerClient,
       fsCache,
       toolCache,
+      filterTasksFunc: config.filterTasksFunc,
     };
 
     logger.info("Initializing Kai workflow");
