@@ -1,17 +1,22 @@
-import { Logger } from "winston";
+import { type Logger } from "winston";
 
 import {
-  FilterTasksFunction,
+  type EvaluationRunner,
+  type GetTaskManagerAndKaiRunnerFunction,
+} from "../eval";
+import type {
+  AgentTasksProviderFunction,
   KaiWorkflowManager,
   SupportedModelProviders,
 } from "../kai";
-import { TaskManager } from "../taskManager";
-import {
+import type { TaskManager } from "../taskManager";
+import type {
   JavaDiagnosticsInitParams,
   JavaDiagnosticsTasksProvider,
   AnalysisTasksProvider,
   AnalyzerInitParams,
 } from "../taskProviders";
+import { type KaiRunnerConfig } from "../types";
 
 // Consolidated config to setup a Kai workflow for fix generation
 export interface KaiWorkflowSetupConfig {
@@ -25,7 +30,10 @@ export interface KaiWorkflowSetupConfig {
   env?: Record<string, string>;
   solutionServerUrl?: string;
   logDir: string;
-  filterTasksFunc?: FilterTasksFunction; // function to filter tasks for user interaction
+  /*
+   * function to filter tasks for user interaction
+   */
+  filterTasksFunc?: AgentTasksProviderFunction;
 }
 // Result of setting up a Kai workflow for fix generation
 export interface KaiWorkflowSetupResult {
@@ -36,7 +44,7 @@ export interface KaiWorkflowSetupResult {
 // Consolidated config to setup task providers
 export interface TaskProviderSetupConfig {
   workspacePaths: string[];
-  logger: Logger;
+  logger?: Logger;
   diagnosticsParams?: Omit<JavaDiagnosticsInitParams, "workspacePaths">;
   analysisParams?: Omit<
     AnalyzerInitParams,
@@ -75,3 +83,15 @@ export type RunKaiWorkflowInput = {
     agentMode: boolean;
   };
 };
+
+export interface KaiEvalSetupConfig {
+  readonly config: KaiRunnerConfig;
+  readonly storeSnapshots?: boolean;
+  readonly artifactsPath?: string;
+  readonly agentTasksProviderFunc?: AgentTasksProviderFunction;
+  readonly taskManagerAndKaiRunnerFunc?: GetTaskManagerAndKaiRunnerFunction;
+}
+
+export interface KaiEvalSetupResult {
+  readonly evaluationRunner: EvaluationRunner;
+}

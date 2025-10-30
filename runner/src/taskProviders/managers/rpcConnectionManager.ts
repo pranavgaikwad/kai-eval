@@ -1,34 +1,34 @@
 import * as net from "net";
 
 import {
+  type MessageConnection,
+  type NotificationType,
+  type RequestType,
   createMessageConnection,
   StreamMessageReader,
   StreamMessageWriter,
-  MessageConnection,
-  NotificationType,
-  RequestType,
 } from "vscode-jsonrpc/node";
-import { Logger } from "winston";
+import type { Logger } from "winston";
 
 import { pathToUri } from "../../utils/paths";
 import {
-  InitializeParams,
-  InitializeResult,
+  type InitializeParams,
+  type InitializeResult,
+  type PublishDiagnosticsParams,
+  type DidChangeTextDocumentParams,
+  type DidOpenTextDocumentParams,
+  type DidCloseTextDocumentParams,
+  type DidSaveTextDocumentParams,
+  type DidChangeWatchedFilesParams,
+  type FileEvent,
   InitializeRequest,
   InitializedNotification,
   PublishDiagnosticsNotification,
-  PublishDiagnosticsParams,
   DidChangeTextDocumentNotification,
-  DidChangeTextDocumentParams,
   DidOpenTextDocumentNotification,
-  DidOpenTextDocumentParams,
   DidCloseTextDocumentNotification,
-  DidCloseTextDocumentParams,
   DidSaveTextDocumentNotification,
-  DidSaveTextDocumentParams,
   DidChangeWatchedFilesNotification,
-  DidChangeWatchedFilesParams,
-  FileEvent,
 } from "../types/lsp";
 
 /**

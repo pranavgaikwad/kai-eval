@@ -1,5 +1,5 @@
 import chokidar from "chokidar";
-import { Logger } from "winston";
+import type { Logger } from "winston";
 
 export interface FileWatchCapable {
   onFileChange?: (event: FileChangeEvent) => Promise<void>;
@@ -88,7 +88,7 @@ export class SharedFileWatcher {
   }
 
   private constructor(private readonly logger: Logger) {
-    this.logger = logger.child({ module: 'SharedFileWatcher' });
+    this.logger = logger.child({ module: "SharedFileWatcher" });
   }
 
   registerProvider(provider: FileWatchCapable): void {
@@ -110,7 +110,7 @@ export class SharedFileWatcher {
     }
 
     this.logger.info("Starting file watcher for paths", {
-      paths: this.basePaths
+      paths: this.basePaths,
     });
 
     try {
@@ -125,14 +125,14 @@ export class SharedFileWatcher {
         .on("error", (error) => this.handleWatchError(error))
         .on("ready", () => {
           this.logger.debug("File watcher is ready and watching base paths", {
-            basePathCount: this.basePaths.length
+            basePathCount: this.basePaths.length,
           });
         });
 
       this.isWatching = true;
       this.logger.debug("File watcher started successfully");
     } catch (error) {
-      this.logger.error({"msg": "Failed to start file watcher", error});
+      this.logger.error({ msg: "Failed to start file watcher", error });
       throw error;
     }
   }
@@ -155,7 +155,7 @@ export class SharedFileWatcher {
       this.providers.clear();
       this.logger.debug("File watcher stopped successfully");
     } catch (error) {
-      this.logger.error({"msg": "Error stopping file watcher", error});
+      this.logger.error({ msg: "Error stopping file watcher", error });
       throw error;
     }
   }
@@ -189,7 +189,10 @@ export class SharedFileWatcher {
             await provider.onFileChange(event);
           }
         } catch (error) {
-          this.logger.error({"msg": "Error notifying provider about file change", error});
+          this.logger.error({
+            msg: "Error notifying provider about file change",
+            error,
+          });
         }
       },
     );
@@ -205,7 +208,9 @@ export class SharedFileWatcher {
       this.logger.warn("Watched base path was deleted", { dirPath });
       this.basePaths.splice(deletedBasePathIndex, 1);
       if (this.basePaths.length === 0) {
-        this.logger.warn("All watched paths have been deleted, stopping file watcher");
+        this.logger.warn(
+          "All watched paths have been deleted, stopping file watcher",
+        );
         await this.stop();
         return;
       }
@@ -214,11 +219,13 @@ export class SharedFileWatcher {
   }
 
   private handleWatchError(error: Error): void {
-    this.logger.error({"msg": "File watcher error", error});
+    this.logger.error({ msg: "File watcher error", error });
     if (error.message.includes("ENOENT") || error.message.includes("ENOTDIR")) {
-      this.logger.warn("Watch target no longer exists, this is usually handled automatically");
+      this.logger.warn(
+        "Watch target no longer exists, this is usually handled automatically",
+      );
     } else {
-      this.logger.error({"msg": "Unexpected file watcher error", error});
+      this.logger.error({ msg: "Unexpected file watcher error", error });
     }
   }
 }

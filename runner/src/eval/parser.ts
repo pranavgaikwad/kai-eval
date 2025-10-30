@@ -1,11 +1,10 @@
 import { promises as fs } from "fs";
+import path from "path";
 
 import { load as yamlLoad } from "js-yaml";
 import { glob as globby } from "tinyglobby";
 
 import type { TestApplication, TestCase } from "./types";
-import { fstat } from "fs";
-import path from "path";
 
 export class ParseError extends Error {
   constructor(

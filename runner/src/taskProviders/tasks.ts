@@ -1,6 +1,6 @@
 import * as crypto from "crypto";
 
-import { Task, TaskFactory, AnalysisIncident, Diagnostic } from "./types";
+import type { Task, TaskFactory, AnalysisIncident, Diagnostic } from "./types";
 import { fileUriToPath } from "../utils/paths";
 
 export class DiagnosticTask implements Task {

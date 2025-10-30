@@ -3,15 +3,15 @@ import os from "os";
 import path from "path";
 
 import { NotificationType, RequestType } from "vscode-jsonrpc/node";
-import { Logger } from "winston";
+import type { Logger } from "winston";
 
 import {
   TasksStoreManager,
   ProcessManager,
   RPCConnectionManager,
 } from "./managers";
-import { AnalysisTask, AnalysisTaskFactory } from "./tasks";
-import {
+import { type AnalysisTask, AnalysisTaskFactory } from "./tasks";
+import type {
   AnalysisIncident,
   AnalysisRuleSet,
   TriggerAnalysisEvent,
@@ -20,7 +20,7 @@ import {
   VersionedTasks,
 } from "./types";
 import { EventDebouncer } from "../utils/eventDebouncer";
-import { FileWatchCapable, FileChangeEvent } from "../utils/fsWatch";
+import type { FileWatchCapable, FileChangeEvent } from "../utils/fsWatch";
 
 export interface AnalyzerInitParams extends BaseInitParams {
   analyzerBinaryPath: string;

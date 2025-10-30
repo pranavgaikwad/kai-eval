@@ -1,4 +1,4 @@
-import { Logger } from "winston";
+import type { Logger } from "winston";
 
 export interface DebounceConfig<TEvent> {
   debounceMs: number;
@@ -12,8 +12,11 @@ export class EventDebouncer<TEvent> {
   private debounceTimer?: NodeJS.Timeout;
   private isProcessing = false;
 
-  constructor(private readonly logger: Logger, private readonly config: DebounceConfig<TEvent>) {
-    this.logger = logger.child({ module: 'EventDebouncer' });
+  constructor(
+    private readonly logger: Logger,
+    private readonly config: DebounceConfig<TEvent>,
+  ) {
+    this.logger = logger.child({ module: "EventDebouncer" });
   }
 
   addEvent(event: TEvent): void {
@@ -41,14 +44,16 @@ export class EventDebouncer<TEvent> {
     const startTime = Date.now();
     const checkIdle = async (): Promise<void> => {
       if (Date.now() - startTime > timeoutMs) {
-        this.logger.warn("EventDebouncer waitUntilIdle timed out", { timeoutMs });
+        this.logger.warn("EventDebouncer waitUntilIdle timed out", {
+          timeoutMs,
+        });
         return;
       }
       if (this.eventQueue.length > 0 || this.isProcessing) {
         if (this.eventQueue.length > 0 && !this.isProcessing) {
           await this.flush();
         }
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 50));
         return checkIdle();
       }
     };
@@ -78,22 +83,30 @@ export class EventDebouncer<TEvent> {
       const eventsToProcess = [...this.eventQueue];
       this.eventQueue = [];
 
-      this.logger.debug("Processing batch of events", { eventCount: eventsToProcess.length });
+      this.logger.debug("Processing batch of events", {
+        eventCount: eventsToProcess.length,
+      });
 
       let filteredEvents = eventsToProcess;
       if (this.config.filter) {
         filteredEvents = this.config.filter(eventsToProcess);
-        this.logger.silly("Filtered relevant events", { eventCount: filteredEvents.length });
+        this.logger.silly("Filtered relevant events", {
+          eventCount: filteredEvents.length,
+        });
       }
 
       if (this.config.deduplicate) {
         filteredEvents = this.config.deduplicate(filteredEvents);
-        this.logger.silly("Deduplicated unique events", { eventCount: filteredEvents.length });
+        this.logger.silly("Deduplicated unique events", {
+          eventCount: filteredEvents.length,
+        });
       }
 
       if (filteredEvents.length > 0) {
         await this.config.processor(filteredEvents);
-        this.logger.debug("Successfully processed events", { eventCount: filteredEvents.length });
+        this.logger.debug("Successfully processed events", {
+          eventCount: filteredEvents.length,
+        });
       } else {
         this.logger.debug("No events to process after filtering");
       }
@@ -102,9 +115,12 @@ export class EventDebouncer<TEvent> {
     } finally {
       this.isProcessing = false;
       if (this.eventQueue.length > 0) {
-        this.logger.debug("New events queued during processing, scheduling next batch", {
-          queueLength: this.eventQueue.length
-        });
+        this.logger.debug(
+          "New events queued during processing, scheduling next batch",
+          {
+            queueLength: this.eventQueue.length,
+          },
+        );
         this.scheduleProcessing();
       }
     }

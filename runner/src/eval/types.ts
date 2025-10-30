@@ -1,4 +1,11 @@
-import { AnalysisTask, DiagnosticTask } from "src/taskProviders";
+import { type BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { type BaseMessage } from "@langchain/core/messages";
+import { type Logger } from "winston";
+
+import { type AnalysisTask, type DiagnosticTask } from "../taskProviders";
+import { type EvaluationTools } from "./tools";
+import { type TaskManager } from "../taskManager";
+import { type KaiRunnerConfig } from "../types";
 
 /**
  * Represents application metadata and coordinates
@@ -40,15 +47,28 @@ export interface TestCase {
   readonly notes: string;
 }
 
-// Each test case is run under different parameters
+/*
+ * Returns the results for a test case from multple experiment runs
+ * Each experiment runs the test case under unique parameters e.g. agent enabled/disabled.
+ */
 export interface TestCaseResults {
   readonly testCase: TestCase;
   errors: Error[];
   results: ExperimentResults[];
 }
 
-export interface ExperimentResults {
+export interface TestCaseVariant {
   readonly name: string;
+  readonly agentMode: boolean;
+  readonly solutionServerUrl?: string;
+}
+
+/*
+ * Results for a single experiment run of a test case
+ * name is unique identifier for the experiment run.
+ */
+export interface ExperimentResults {
+  readonly name: string; // identifies a variant
   readonly completeness: Metric;
   readonly functionalParity: Metric;
   readonly residualEffort: Metric;
@@ -60,15 +80,15 @@ export interface Metric {
   readonly score: number;
 }
 
-export interface EvaluationRunner {
-  run: (testCases: TestCase[]) => Promise<TestCaseResults[]>;
-}
-
 export interface BeforeAfter<T> {
   readonly before: T;
   readonly after: T;
 }
 
+/**
+ * We build tools dynamically for a given test case.
+ * The tools operate on frozen results we inited with.
+ */
 export interface EvaluationToolOptions {
   readonly analysisIssues: BeforeAfter<AnalysisTask[]>;
   readonly diagnosticsIssues: BeforeAfter<DiagnosticTask[]>;
@@ -80,3 +100,53 @@ export interface EvaluationToolOptions {
     readonly rule: string;
   }[];
 }
+
+export interface EvaluationRunOptions {
+  readonly testSelectors?: string[];
+  readonly variants?: TestCaseVariant[];
+}
+
+export interface EvaluationRunner {
+  run: (
+    testCases: TestCase[],
+    opts: EvaluationRunOptions,
+  ) => Promise<TestCaseResults[]>;
+}
+
+export interface AgentInput {
+  testCase: TestCase;
+  evaluationTools: EvaluationTools;
+  issues: string; // Pre-formatted issues string
+  model: BaseChatModel;
+  logger: Logger;
+}
+
+export interface AgentResult {
+  metric: Metric;
+  responses: BaseMessage[];
+}
+
+export type KaiRunnerFunction = (input: {
+  tc: TestCase;
+  application: TestApplication;
+  variant: TestCaseVariant;
+}) => Promise<void>;
+
+/**
+ * This is a function that evaluation runner uses to
+ * get the task manager as well as something that runs
+ * kai to fix the given issues. This is so that we can
+ * swap between standalone runner and IDE. The task manager
+ * is needed so that evaluation runner can get the tasks
+ * before and after running the kai workflow. This task
+ * manager can have task providers that either talk to a
+ * language server or runs a standalone tool.
+ */
+export type GetTaskManagerAndKaiRunnerFunction = (
+  logger: Logger,
+  config: KaiRunnerConfig,
+) => Promise<{
+  taskManager: TaskManager;
+  kaiRunner: KaiRunnerFunction;
+  shutdownFunc: () => Promise<void>;
+}>;

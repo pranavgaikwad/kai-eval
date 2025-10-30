@@ -2,15 +2,15 @@ import { promises as fs } from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import { Logger } from "winston";
+import type { Logger } from "winston";
 
 import {
   TasksStoreManager,
   ProcessManager,
   RPCConnectionManager,
 } from "./managers";
-import { DiagnosticTask, DiagnosticTaskFactory } from "./tasks";
-import {
+import { type DiagnosticTask, DiagnosticTaskFactory } from "./tasks";
+import type {
   TaskProvider,
   BaseInitParams,
   Diagnostic,
@@ -18,9 +18,9 @@ import {
   VersionedTasks,
 } from "./types";
 import { EventDebouncer } from "../utils/eventDebouncer";
-import { FileWatchCapable, FileChangeEvent } from "../utils/fsWatch";
+import type { FileWatchCapable, FileChangeEvent } from "../utils/fsWatch";
 import { pathToUri } from "../utils/paths";
-import { FileEvent, FileChangeType } from "./types/lsp";
+import { type FileEvent, FileChangeType } from "./types/lsp";
 
 export interface JavaDiagnosticsInitParams extends BaseInitParams {
   jdtlsBinaryPath: string;

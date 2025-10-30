@@ -1,11 +1,11 @@
+import { exec } from "child_process";
 import { promises as fs } from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { exec } from "child_process";
 import { promisify } from "util";
 
 import { glob as globby } from "tinyglobby";
-import { Logger } from "winston";
+import type { Logger } from "winston";
 
 const execAsync = promisify(exec);
 /**

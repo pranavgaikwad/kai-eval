@@ -54,10 +54,7 @@ describe("Evaluation Agents Tests", () => {
         path.join(logDir, "agents-test.log"),
       );
 
-      coolstoreProjectPath = path.join(
-        testDataPath,
-        "coolstore-eval-agents-test",
-      );
+      coolstoreProjectPath = path.join(testDataPath, "coolstore");
 
       try {
         await fs.rm(coolstoreProjectPath, { recursive: true, force: true });

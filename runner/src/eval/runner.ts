@@ -4,66 +4,48 @@ import * as os from "os";
 import * as path from "path";
 import { promisify } from "util";
 
-import { type KaiRunnerConfig } from "../types";
-import { type TaskManager } from "../taskManager";
-import { type Task } from "../taskProviders";
-import { AnalysisTask, DiagnosticTask } from "../taskProviders/tasks";
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { Logger } from "winston";
+import { type BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { type Logger } from "winston";
 
-import { parseTestCasesFromDirectory } from "./parser";
+import { runEvaluation } from "./agents";
+import { EvaluationTools } from "./tools";
 import {
   type EvaluationRunner,
   type TestCase,
-  TestCaseResults,
-  ExperimentResults,
+  type TestCaseResults,
+  type ExperimentResults,
   type TestApplication,
   type EvaluationToolOptions,
+  type EvaluationRunOptions as RunEvaluationOptions,
+  type TestCaseVariant,
+  type GetTaskManagerAndKaiRunnerFunction,
 } from "./types";
-import { EvaluationTools } from "./tools";
-import { runEvaluation } from "./agents";
-import { setupKaiRunner } from "../setup/kaiRunner";
-import { type RunKaiWorkflowInput } from "../setup/types";
-import { type SupportedModelProviders } from "../kai";
-import { createModel } from "../kai/modelProvider";
+import { type SupportedModelProviders, createModel } from "../kai";
+import { type TaskManager } from "../taskManager";
+import { AnalysisTask, DiagnosticTask, type Task } from "../taskProviders";
+import { type KaiRunnerConfig } from "../types";
 import { getAllFiles, getChangedFiles } from "../utils/paths";
 
 const execAsync = promisify(exec);
 
-interface TestVariant {
-  readonly name: string;
-  readonly agentMode: boolean;
-  readonly solutionServerUrl?: string;
-}
-
 export class DefaultEvaluationRunner implements EvaluationRunner {
   private readonly artifactsPath: string;
-  private readonly logger: Logger;
-  private readonly variants: TestVariant[] = [
-    {
-      name: "basic",
-      agentMode: false,
-    },
-    {
-      name: "agent",
-      agentMode: true,
-    },
-  ];
 
   constructor(
-    private readonly config: KaiRunnerConfig & {
-      logger: Logger;
-      artifactsPath?: string;
-      testDataPath?: string;
-      testCaseFilters?: string[];
-    },
+    private readonly config: KaiRunnerConfig,
+    private readonly getTaskManagerAndKaiRunnerFunc: GetTaskManagerAndKaiRunnerFunction,
+    private readonly logger: Logger,
+    artifactsPath?: string,
   ) {
     this.artifactsPath =
-      config.artifactsPath || path.join(os.tmpdir(), "eval-artifacts");
-    this.logger = config.logger.child({ module: "DefaultEvaluationRunner" });
+      artifactsPath || path.join(os.tmpdir(), "eval-artifacts");
+    this.logger = logger.child({ module: "DefaultEvaluationRunner" });
   }
 
-  async run(testCases: TestCase[]): Promise<TestCaseResults[]> {
+  async run(
+    testCases: TestCase[],
+    opts: RunEvaluationOptions,
+  ): Promise<TestCaseResults[]> {
     this.logger.info(
       `Starting evaluation run with ${testCases.length} test cases`,
     );
@@ -73,6 +55,17 @@ export class DefaultEvaluationRunner implements EvaluationRunner {
     }
 
     const results: TestCaseResults[] = [];
+
+    const variants = opts.variants || [
+      {
+        name: "basic",
+        agentMode: false,
+      },
+      {
+        name: "agent",
+        agentMode: true,
+      },
+    ];
 
     for (const testCase of testCases) {
       this.logger.info(`Processing test case: ${testCase.name}`);
@@ -84,7 +77,7 @@ export class DefaultEvaluationRunner implements EvaluationRunner {
       };
 
       try {
-        for (const variant of this.variants) {
+        for (const variant of variants) {
           this.logger.info(
             `Using variant: ${variant.name} for test case: ${testCase.name}`,
           );
@@ -226,7 +219,7 @@ export class DefaultEvaluationRunner implements EvaluationRunner {
 
   private async executeTestCase(
     testCase: TestCase,
-    variant: TestVariant,
+    variant: TestCaseVariant,
     modelConfig: {
       provider: SupportedModelProviders;
       args: Record<string, unknown>;
@@ -245,32 +238,20 @@ export class DefaultEvaluationRunner implements EvaluationRunner {
         application,
       );
 
-      const {
-        runFunc: runKaiWorkflow,
-        taskManager,
-        shutdown: kaiShutdown,
-      } = await setupKaiRunner(
-        testConfig,
-        process.env as Record<string, string>,
-        false,
-      );
+      const { taskManager, kaiRunner, shutdownFunc } =
+        await this.getTaskManagerAndKaiRunnerFunc(this.logger, testConfig);
 
       try {
         this.logger.debug("Collecting pre-migration data");
         const fileListBefore = await getAllFiles(this.logger, workspacePath);
         const tasksBefore = await this.getAllTasks(taskManager);
 
-        const workflowInput: RunKaiWorkflowInput = {
-          kind: "fixByRules",
-          data: {
-            rules: testCase.rules,
-            migrationHint: testCase.migrationHint,
-            programmingLanguage: application.programmingLanguage,
-            agentMode: variant.agentMode,
-          },
-        };
         this.logger.debug("Running Kai workflow");
-        await runKaiWorkflow(workflowInput);
+        await kaiRunner({
+          tc: testCase,
+          application,
+          variant,
+        });
 
         this.logger.debug("Collecting post-migration data");
         const fileListAfter = await getAllFiles(this.logger, workspacePath);
@@ -355,8 +336,7 @@ export class DefaultEvaluationRunner implements EvaluationRunner {
           diff: changedFilePaths.join("\n"),
         };
       } finally {
-        // Always cleanup the KaiRunner
-        await kaiShutdown();
+        await shutdownFunc();
       }
     } catch (error) {
       this.logger.error(`Failed to execute test case ${testCase.name}`, {
@@ -417,22 +397,12 @@ export class DefaultEvaluationRunner implements EvaluationRunner {
     return changedFiles;
   }
 
-  /**
-   * Filters and formats tasks that match the test case rules
-   */
   private getMatchingIssues(testCase: TestCase, tasks: Task[]): string {
     const matchingTasks: string[] = [];
-
     for (const task of tasks) {
-      // Check if this is an AnalysisTask with rule information
-      if (
-        "getIncident" in task &&
-        typeof (task as any).getIncident === "function"
-      ) {
+      if (task instanceof AnalysisTask) {
         const analysisTask = task as AnalysisTask;
         const incident = analysisTask.getIncident();
-
-        // Check if this task matches any of the test case rules
         const matches = testCase.rules.some(
           (rule) =>
             incident.ruleSet === rule.ruleset && incident.rule === rule.rule,
@@ -443,13 +413,9 @@ export class DefaultEvaluationRunner implements EvaluationRunner {
         }
       }
     }
-
     return matchingTasks.join("\n");
   }
 
-  /**
-   * Gets the evaluation model from config
-   */
   private async getEvaluationModel(): Promise<BaseChatModel> {
     if (!this.config.models || this.config.models.length === 0) {
       throw new Error("No models configured");

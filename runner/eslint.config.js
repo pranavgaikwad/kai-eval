@@ -20,7 +20,12 @@ export default [
       "import/order": [
         "error",
         {
-          groups: ["builtin", "external", "internal", ["parent", "sibling", "index"]],
+          groups: [
+            "builtin",
+            "external",
+            "internal",
+            ["parent", "sibling", "index"],
+          ],
           "newlines-between": "always",
           alphabetize: { order: "asc", caseInsensitive: true },
         },
@@ -30,15 +35,22 @@ export default [
       "@typescript-eslint/no-unused-vars": [
         "error",
         {
-          "vars": "all",
-          "args": "after-used",
-          "ignoreRestSiblings": true,
-          "varsIgnorePattern": "^_",
-          "argsIgnorePattern": "^_",
-          "caughtErrorsIgnorePattern": "^_"
-        }
+          vars: "all",
+          args: "after-used",
+          ignoreRestSiblings: true,
+          varsIgnorePattern: "^_",
+          argsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
       ],
-
+      "@typescript-eslint/consistent-type-imports": [
+        "error",
+        {
+          prefer: "type-imports",
+          fixStyle: "inline-type-imports",
+          disallowTypeAnnotations: false,
+        },
+      ],
     },
   },
 ];

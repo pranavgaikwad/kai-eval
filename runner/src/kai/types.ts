@@ -1,10 +1,10 @@
 import {
-  SolutionServerClient,
-  FileBasedResponseCache,
-  InMemoryCacheWithRevisions,
-  KaiModelProvider,
+  type SolutionServerClient,
+  type FileBasedResponseCache,
+  type InMemoryCacheWithRevisions,
+  type KaiModelProvider,
 } from "@editor-extensions/agentic";
-import { Logger } from "winston";
+import type { Logger } from "winston";
 
 import { type TaskManager } from "../taskManager";
 
@@ -23,7 +23,7 @@ export interface KaiWorkflowManagerOptions {
   solutionServerClient: SolutionServerClient;
   fsCache: InMemoryCacheWithRevisions<string, string>;
   toolCache: FileBasedResponseCache<Record<string, unknown>, string>;
-  filterTasksFunc?: FilterTasksFunction;
+  filterTasksFunc?: AgentTasksProviderFunction;
 }
 
 export interface FilteredTask {
@@ -31,6 +31,6 @@ export interface FilteredTask {
   task: string;
 }
 
-export type FilterTasksFunction = (
+export type AgentTasksProviderFunction = (
   taskManeger: TaskManager,
 ) => Promise<FilteredTask[]>;

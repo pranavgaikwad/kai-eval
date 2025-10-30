@@ -2,17 +2,17 @@ import { promises as fs } from "fs";
 import * as path from "path";
 
 import { tool } from "@langchain/core/tools";
+import { type Task } from "src/taskProviders";
+import { type Logger } from "winston";
 import { z } from "zod";
 
-import { EvaluationToolOptions } from "./types";
-import { getMatchingFiles } from "../utils/paths";
-import { Task } from "src/taskProviders";
+import { type EvaluationToolOptions } from "./types";
 
 export class EvaluationTools {
   constructor(
     private readonly options: EvaluationToolOptions,
     private readonly workspacePath: string,
-    private readonly logger: any,
+    private readonly _logger: Logger,
   ) {}
 
   getAppArchitectureTool() {

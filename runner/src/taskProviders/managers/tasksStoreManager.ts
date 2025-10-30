@@ -1,6 +1,6 @@
-import { Logger } from "winston";
+import type { Logger } from "winston";
 
-import { Task, TaskFactory, VersionedTasks } from "../types/taskProvider";
+import type { Task, TaskFactory, VersionedTasks } from "../types/taskProvider";
 
 export class TasksStoreManager<TData, TTask extends Task> {
   private readonly dataMap = new Map<string, TData[]>();

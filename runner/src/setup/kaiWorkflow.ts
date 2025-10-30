@@ -4,10 +4,13 @@ import {
   FileBasedResponseCache,
 } from "@editor-extensions/agentic";
 
-import { KaiWorkflowSetupConfig, KaiWorkflowSetupResult } from "./types";
+import {
+  type KaiWorkflowSetupConfig,
+  type KaiWorkflowSetupResult,
+} from "./types";
 import {
   KaiWorkflowManager,
-  KaiWorkflowManagerOptions,
+  type KaiWorkflowManagerOptions,
   createModelProvider,
 } from "../kai";
 

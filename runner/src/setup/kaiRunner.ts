@@ -1,27 +1,30 @@
 import * as os from "os";
 import * as path from "path";
 
-import { EnhancedIncident } from "@editor-extensions/shared";
+import { type EnhancedIncident } from "@editor-extensions/shared";
 
 import { setupKaiWorkflow } from "./kaiWorkflow";
 import { setupProviders } from "./providers";
 import {
-  KaiWorkflowSetupConfig,
-  TaskProviderSetupConfig,
-  KaiRunnerSetupResult,
-  RunKaiWorkflowInput,
+  type KaiWorkflowSetupConfig,
+  type TaskProviderSetupConfig,
+  type KaiRunnerSetupResult,
+  type RunKaiWorkflowInput,
 } from "./types";
-import { FilterTasksFunction } from "../kai";
+import {
+  type KaiWorkflowManager,
+  type AgentTasksProviderFunction,
+} from "../kai";
 import { TaskManager } from "../taskManager";
 import { AnalysisTask } from "../taskProviders";
-import { KaiRunnerConfig } from "../types";
+import type { KaiRunnerConfig } from "../types";
 import { createOrderedLogger } from "../utils/logger";
 
 export async function setupKaiRunner(
   config: KaiRunnerConfig,
   env: Record<string, string> = process.env as Record<string, string>,
   storeSnapshots: boolean = false,
-  filterTasksFunc?: FilterTasksFunction,
+  filterTasksFunc?: AgentTasksProviderFunction,
 ): Promise<KaiRunnerSetupResult> {
   // Validate required configuration
   if (!config.workspacePaths || config.workspacePaths.length === 0) {
@@ -124,7 +127,34 @@ export async function setupKaiRunner(
     }
   };
 
-  const runFunc = async function (inp: RunKaiWorkflowInput): Promise<void> {
+  const runFunc = getKaiWorkflowStarterFunction(
+    taskManager,
+    kaiSetup.kaiWorkflowManager,
+  );
+
+  return {
+    logger,
+    providersSetup,
+    kaiSetup,
+    taskManager,
+    shutdown,
+    runFunc,
+  };
+}
+
+/**
+ * This returns a function that can be used to start a kai workflow
+ * The function takes as input "seed rules" and checks if those rules
+ * are present in the analysis tasks we got from the task manager.
+ * @param taskManager - Task manager to get tasks from
+ * @param kaiSetup - Kai setup to execute workflow
+ * @returns
+ */
+export function getKaiWorkflowStarterFunction(
+  taskManager: TaskManager,
+  kaiWorkflowManager: KaiWorkflowManager,
+): (inp: RunKaiWorkflowInput) => Promise<void> {
+  return async (inp: RunKaiWorkflowInput) => {
     // get analysis tasks and ensure given issues are present in analysis tasks
     const snapshotId = await taskManager.getTasks();
     const compareResult = taskManager.getTasksDiff(snapshotId);
@@ -166,20 +196,11 @@ export async function setupKaiRunner(
         violation_category: task.getIncident().category,
       } as EnhancedIncident;
     });
-    return await kaiSetup.kaiWorkflowManager.executeWorkflow({
+    return await kaiWorkflowManager.executeWorkflow({
       enableAgentMode: inp.data.agentMode,
       migrationHint: inp.data.migrationHint,
       programmingLanguage: inp.data.programmingLanguage,
       incidents,
     });
-  };
-
-  return {
-    logger,
-    providersSetup,
-    kaiSetup,
-    taskManager,
-    shutdown,
-    runFunc,
   };
 }

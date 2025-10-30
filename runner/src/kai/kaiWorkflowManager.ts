@@ -4,47 +4,51 @@ import * as path from "path";
 
 import {
   KaiInteractiveWorkflow,
-  KaiInteractiveWorkflowInput,
-  KaiWorkflowMessage,
+  type KaiInteractiveWorkflowInput,
+  type KaiWorkflowMessage,
   KaiWorkflowMessageType,
-  KaiWorkflowInitOptions,
-  KaiUserInteraction,
-  KaiModifiedFile,
-  KaiUserInteractionMessage,
+  type KaiWorkflowInitOptions,
+  type KaiUserInteraction,
+  type KaiModifiedFile,
+  type KaiUserInteractionMessage,
 } from "@editor-extensions/agentic";
-import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
-import { Logger } from "winston";
+import { type AIMessage, AIMessageChunk } from "@langchain/core/messages";
+import type { Logger } from "winston";
 
-import { TaskManager } from "../taskManager";
+import { type TaskManager } from "../taskManager";
 import {
-  FilteredTask,
-  FilterTasksFunction,
-  KaiWorkflowManagerOptions,
+  type FilteredTask,
+  type AgentTasksProviderFunction,
+  type KaiWorkflowManagerOptions,
 } from "./types";
 
+/**
+ * Class that manages the workflow from @editor-extensions/agentic.
+ * It requires a TaskManager that is initiated with TaskProviders.
+ * Calls getTasks() function during agent run to provide agents with new tasks.
+ */
 export class KaiWorkflowManager {
-  private workflow: KaiInteractiveWorkflow;
+  private readonly workflow: KaiInteractiveWorkflow;
   private isInitialized: boolean = false;
-  private pendingInteractions: Map<string, (response: unknown) => void> =
-    new Map();
+  private readonly pendingInteractions: Map<
+    string,
+    (response: unknown) => void
+  > = new Map();
   private workspaceDir: string = "";
 
-  // stream buffer
+  // stream buffer, used to buffer and trace LLM responses to a file
   private readonly defaultBuffer: AIMessageChunk = new AIMessageChunk({
     content: "",
     id: "<unknown>",
   });
   private buffer: AIMessageChunk = this.defaultBuffer;
   private traceDir: string;
-  private filterTasksFunction: FilterTasksFunction = getFilteredTasks;
+  private filterTasksFunction: AgentTasksProviderFunction = getFilteredTasks;
 
   constructor(
     private readonly logger: Logger,
     private readonly taskManager: TaskManager,
-    private readonly logDir: string = path.join(
-      os.tmpdir(),
-      `kai-workflow-trace-${Date.now()}`,
-    ),
+    logDir: string = path.join(os.tmpdir(), `kai-workflow-trace-${Date.now()}`),
   ) {
     this.logger = logger.child({ module: "KaiWorkflowManager" });
     this.workflow = new KaiInteractiveWorkflow(this.logger);

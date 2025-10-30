@@ -1,5 +1,5 @@
-import { createLogger, format, transports, Logger } from "winston";
-import TransportStream from "winston-transport";
+import { type Logger, createLogger, format, transports } from "winston";
+import type TransportStream from "winston-transport";
 
 export const orderedJsonFormat = format.printf((info) => {
   const { timestamp, level, message, module, component, ...rest } = info;

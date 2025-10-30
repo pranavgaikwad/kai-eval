@@ -1,10 +1,10 @@
-import { spawn, ChildProcess, SpawnOptions } from "child_process";
+import { type ChildProcess, type SpawnOptions, spawn } from "child_process";
 import { promises as fs } from "fs";
 import * as net from "net";
 import * as os from "os";
 import path from "path";
 
-import { Logger } from "winston";
+import type { Logger } from "winston";
 
 export interface ProcessSpawnOptions extends SpawnOptions {
   onStdout?: (data: string) => void;
@@ -25,15 +25,16 @@ export class ProcessManager {
   private server?: net.Server;
 
   constructor(private readonly logger: Logger) {
-    this.logger = logger.child({ module: 'ProcessManager' });
+    this.logger = logger.child({ module: "ProcessManager" });
   }
 
   async spawn(
     command: string,
     args: string[],
-    options?: ProcessSpawnOptions
+    options?: ProcessSpawnOptions,
   ): Promise<ProcessSpawnResult> {
-    const { onStdout, onStderr, onError, onExit, ...spawnOptions } = options || {};
+    const { onStdout, onStderr, onError, onExit, ...spawnOptions } =
+      options || {};
 
     this.process = spawn(command, args, {
       stdio: ["pipe", "pipe", "pipe"],
@@ -46,7 +47,7 @@ export class ProcessManager {
     if (options?.listenOnPipe) {
       await this.createPipeBridge(pipeName);
     }
-    return { process: this.process, pipeName };  
+    return { process: this.process, pipeName };
   }
 
   async waitForFile(filePath: string, timeoutMs = 30000): Promise<void> {
@@ -141,7 +142,7 @@ export class ProcessManager {
     onStdout?: (data: string) => void,
     onStderr?: (data: string) => void,
     onError?: (error: Error) => void,
-    onExit?: (code: number | null, signal: NodeJS.Signals | null) => void
+    onExit?: (code: number | null, signal: NodeJS.Signals | null) => void,
   ): void {
     if (!this.process) return;
 
@@ -186,7 +187,7 @@ export class ProcessManager {
     const tmpDir = os.tmpdir();
     const pipeName = path.join(
       tmpDir,
-      `jdtls_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      `jdtls_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     );
     return pipeName;
   }

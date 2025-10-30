@@ -2,10 +2,10 @@ import { promises as fs } from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import { Logger } from "winston";
+import { type Logger } from "winston";
 
-import { TaskSnapshot, TaskSnapshotDiff } from "./types";
-import { TaskProvider, Task } from "../taskProviders";
+import type { TaskSnapshotDiff, TaskSnapshot } from "./types";
+import { type TaskProvider, type Task } from "../taskProviders";
 
 export class TaskManager {
   private providers: TaskProvider[] = [];

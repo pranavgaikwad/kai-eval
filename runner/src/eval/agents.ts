@@ -1,22 +1,7 @@
+import { type BaseMessage } from "@langchain/core/messages";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { Logger } from "winston";
 
-import { TestCase, Metric } from "./types";
-import { EvaluationTools } from "./tools";
-
-export interface AgentInput {
-  testCase: TestCase;
-  evaluationTools: EvaluationTools;
-  issues: string; // Pre-formatted issues string
-  model: BaseChatModel;
-  logger: Logger;
-}
-
-export interface AgentResult {
-  metric: Metric;
-  responses: any[];
-}
+import { type AgentInput, type AgentResult } from "./types";
 
 /**
  * Runs the completeness evaluation agent
@@ -25,7 +10,7 @@ export async function runCompletenessAgent(
   input: AgentInput,
 ): Promise<AgentResult> {
   const { testCase, evaluationTools, issues, model, logger } = input;
-  const responses: any[] = [];
+  const responses: BaseMessage[] = [];
 
   const COMPLETENESS_PROMPTS = {
     system:
@@ -224,7 +209,7 @@ ${testCase.migrationHint}`,
       },
     );
 
-    responses.push(rateResponse);
+    responses.push(...rateResponse.messages);
     const ratingContent =
       rateResponse.messages[rateResponse.messages.length - 1].content;
 
@@ -238,7 +223,7 @@ ${testCase.migrationHint}`,
 
     const lines = ratingContent.toString().split("\n");
     for (const line of lines) {
-      const match = line.match(/Rating:\s*([^\n\r\*\#]+)/);
+      const match = line.match(/Rating:\s*([^\n\r*#]+)/);
       if (match) {
         const rating = match[1].trim();
         const deduction = METRICS[rating as keyof typeof METRICS] || 0;
@@ -254,7 +239,10 @@ ${testCase.migrationHint}`,
       responses,
     };
   } catch (error) {
-    logger.error("Error in completeness agent", { error });
+    logger.error("Error in completeness agent", {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     throw error;
   }
 }
@@ -266,7 +254,7 @@ export async function runFunctionalParityAgent(
   input: AgentInput,
 ): Promise<AgentResult> {
   const { testCase, evaluationTools, issues, model, logger } = input;
-  const responses: any[] = [];
+  const responses: BaseMessage[] = [];
 
   const FUNCTIONAL_CORRECTNESS_PROMPTS = {
     system:
@@ -384,11 +372,11 @@ ${testCase.testSelectors?.join(", ") || "Not available"}`,
       },
     );
 
-    responses.push(response);
+    responses.push(...response.messages);
     const content = response.messages[response.messages.length - 1].content;
 
     // Extract rating
-    const ratingMatch = content.toString().match(/Rating:\s*([^\n\r\*\#]+)?/);
+    const ratingMatch = content.toString().match(/Rating:\s*([^\n\r*#]+)?/);
     if (!ratingMatch) {
       throw new Error("No rating found in functional parity response");
     }
@@ -414,7 +402,10 @@ ${testCase.testSelectors?.join(", ") || "Not available"}`,
       responses,
     };
   } catch (error) {
-    logger.error("Error in functional parity agent", { error });
+    logger.error("Error in functional parity agent", {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     throw error;
   }
 }
@@ -426,7 +417,7 @@ export async function runResidualEffortAgent(
   input: AgentInput,
 ): Promise<AgentResult> {
   const { testCase, evaluationTools, issues, model, logger } = input;
-  const responses: any[] = [];
+  const responses: BaseMessage[] = [];
 
   const RESIDUAL_EFFORT_PROMPTS = {
     system:
@@ -541,7 +532,7 @@ ${testCase.migrationHint}`,
       },
     );
 
-    responses.push(response);
+    responses.push(...response.messages);
     const content = response.messages[response.messages.length - 1].content;
 
     // Calculate score based on issues found
@@ -564,7 +555,7 @@ ${testCase.migrationHint}`,
 
     const lines = content.toString().split("\n");
     for (const line of lines) {
-      const match = line.match(/Rating:\s*([^\n\r\*\#]+)/);
+      const match = line.match(/Rating:\s*([^\n\r*#]+)/);
       if (match) {
         const rating = match[1].trim();
         const deduction = METRICS[rating as keyof typeof METRICS] || 0;
@@ -580,7 +571,10 @@ ${testCase.migrationHint}`,
       responses,
     };
   } catch (error) {
-    logger.error("Error in residual effort agent", { error });
+    logger.error("Error in residual effort agent", {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     throw error;
   }
 }

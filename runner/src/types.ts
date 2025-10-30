@@ -1,5 +1,8 @@
-import { SupportedModelProviders } from "./kai";
+import type { SupportedModelProviders } from "./kai";
 
+/**
+ * A consolidated configuration for all components of Kai Runner.
+ */
 export interface KaiRunnerConfig {
   // Logging
   logLevel?: {

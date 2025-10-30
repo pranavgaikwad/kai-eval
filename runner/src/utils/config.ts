@@ -3,7 +3,7 @@ import * as path from "path";
 
 import * as dotenv from "dotenv";
 
-import { KaiRunnerConfig } from "../types";
+import type { KaiRunnerConfig } from "../types";
 
 export interface ConfigLoadOptions {
   configPath?: string;
@@ -11,9 +11,12 @@ export interface ConfigLoadOptions {
   workingDir?: string;
 }
 
-export async function loadConfig(options: ConfigLoadOptions = {}): Promise<KaiRunnerConfig> {
+export async function loadConfig(
+  options: ConfigLoadOptions = {},
+): Promise<KaiRunnerConfig> {
   const workingDir = options.workingDir || process.cwd();
-  const configPath = options.configPath || path.join(workingDir, ".config.json");
+  const configPath =
+    options.configPath || path.join(workingDir, ".config.json");
 
   try {
     const configData = await fs.readFile(configPath, "utf-8");
@@ -24,17 +27,24 @@ export async function loadConfig(options: ConfigLoadOptions = {}): Promise<KaiRu
     return await resolvePaths(config, configDir);
   } catch (error) {
     if (options.configPath) {
-      throw new Error(`Failed to load config file: ${configPath}. Error: ${error}`);
+      throw new Error(
+        `Failed to load config file: ${configPath}. Error: ${error}`,
+      );
     }
     // If no explicit config path provided and default doesn't exist, return empty config
     return {};
   }
 }
 
-async function resolvePaths(config: KaiRunnerConfig, configDir: string): Promise<KaiRunnerConfig> {
+async function resolvePaths(
+  config: KaiRunnerConfig,
+  configDir: string,
+): Promise<KaiRunnerConfig> {
   const resolvedConfig = { ...config };
   const resolvePath = (filePath: string): string => {
-    return path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath);
+    return path.isAbsolute(filePath)
+      ? filePath
+      : path.resolve(configDir, filePath);
   };
 
   if (config.logDir) {
@@ -76,7 +86,9 @@ async function resolvePaths(config: KaiRunnerConfig, configDir: string): Promise
   return resolvedConfig;
 }
 
-export function loadEnv(options: ConfigLoadOptions = {}): Record<string, string> {
+export function loadEnv(
+  options: ConfigLoadOptions = {},
+): Record<string, string> {
   const workingDir = options.workingDir || process.cwd();
   const envPath = options.envPath || path.join(workingDir, ".env");
 
@@ -84,7 +96,9 @@ export function loadEnv(options: ConfigLoadOptions = {}): Record<string, string>
   const result = dotenv.config({ path: envPath });
 
   if (result.error && options.envPath) {
-    throw new Error(`Failed to load env file: ${envPath}. Error: ${result.error}`);
+    throw new Error(
+      `Failed to load env file: ${envPath}. Error: ${result.error}`,
+    );
   }
 
   return process.env as Record<string, string>;

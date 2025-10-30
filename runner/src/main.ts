@@ -3,7 +3,7 @@
 import { program } from "commander";
 
 import { setupKaiRunner } from "./setup";
-import { KaiRunnerConfig } from "./types";
+import type { KaiRunnerConfig } from "./types";
 import { loadConfig, loadEnv } from "./utils/config";
 
 async function main(): Promise<void> {

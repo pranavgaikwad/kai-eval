@@ -1,11 +1,19 @@
+import os from "os";
+import path from "path";
+
+
 import {
   AnalysisTasksProvider,
   JavaDiagnosticsTasksProvider,
-  JavaDiagnosticsInitResult,
-  TaskProvider,
+  type JavaDiagnosticsInitResult,
+  type TaskProvider,
 } from "../taskProviders";
-import { TaskProviderSetupConfig, TaskProviderSetupResult } from "./types";
-import { FileWatchCapable, SharedFileWatcher } from "../utils/fsWatch";
+import {
+  type TaskProviderSetupConfig,
+  type TaskProviderSetupResult,
+} from "./types";
+import { type FileWatchCapable, SharedFileWatcher } from "../utils/fsWatch";
+import { createOrderedLogger } from "../utils/logger";
 import { getExcludedPaths } from "../utils/paths";
 
 export async function setupProviders(
@@ -14,10 +22,16 @@ export async function setupProviders(
   if (!config.workspacePaths || config.workspacePaths.length === 0) {
     throw new Error("basePaths must be provided and non-empty");
   }
-  config.logger = config.logger.child({ module: "ProvidersSetup" });
+  const logger = config.logger
+    ? config.logger.child({ module: "ProvidersSetup" })
+    : createOrderedLogger(
+        "info",
+        "debug",
+        path.join(os.tmpdir(), "providers.log"),
+      );
 
   const fileWatcher = SharedFileWatcher.getInstance(
-    config.logger,
+    logger,
     config.workspacePaths,
   );
   const providers: TaskProvider[] = [];
@@ -26,15 +40,15 @@ export async function setupProviders(
     analysis?: AnalysisTasksProvider;
   } = {};
 
-  config.logger.info("Setting up task management");
+  logger.info("Setting up task management");
 
   try {
     let diagResult: JavaDiagnosticsInitResult | undefined;
 
     if (config.diagnosticsParams) {
-      config.logger.info("Initializing DiagnosticsProvider");
+      logger.info("Initializing DiagnosticsProvider");
 
-      const diagProvider = new JavaDiagnosticsTasksProvider(config.logger);
+      const diagProvider = new JavaDiagnosticsTasksProvider(logger);
       diagResult = await diagProvider.init({
         ...config.diagnosticsParams,
         workspacePaths: config.workspacePaths,
@@ -50,7 +64,7 @@ export async function setupProviders(
         fileWatcher.registerProvider(diagProvider as FileWatchCapable);
       }
 
-      config.logger.info("DiagnosticsProvider initialized", {
+      logger.info("DiagnosticsProvider initialized", {
         pipeName: diagResult.pipeName,
       });
     }
@@ -62,15 +76,15 @@ export async function setupProviders(
         );
       }
 
-      config.logger.info("Processing ignore files for analysis exclusions");
+      logger.info("Processing ignore files for analysis exclusions");
       const excludedPaths = await getExcludedPaths(
-        config.logger,
+        logger,
         config.workspacePaths,
       );
 
-      config.logger.info("Initializing AnalysisProvider");
+      logger.info("Initializing AnalysisProvider");
 
-      const analysisProvider = new AnalysisTasksProvider(config.logger);
+      const analysisProvider = new AnalysisTasksProvider(logger);
       await analysisProvider.init({
         ...config.analysisParams,
         workspacePaths: config.workspacePaths,
@@ -89,43 +103,43 @@ export async function setupProviders(
         fileWatcher.registerProvider(analysisProvider as FileWatchCapable);
       }
 
-      config.logger.info("AnalysisProvider initialized");
+      logger.info("AnalysisProvider initialized");
     }
 
-    config.logger.info("Starting file watcher", {
+    logger.info("Starting file watcher", {
       paths: config.workspacePaths,
     });
     await fileWatcher.start();
 
     const shutdown = async (): Promise<void> => {
-      config.logger.info("Shutting down task management");
+      logger.info("Shutting down task management");
 
       try {
         await fileWatcher.stop();
-        config.logger.info("File watcher stopped");
+        logger.info("File watcher stopped");
 
         const reversedProviders = [...providers].reverse();
         await Promise.all(
           reversedProviders.map(async (provider, index) => {
             try {
               await provider.stop();
-              config.logger.info("Provider stopped", {
+              logger.info("Provider stopped", {
                 providerIndex: reversedProviders.length - index,
               });
             } catch (error) {
-              config.logger.error("Error stopping provider", { error });
+              logger.error("Error stopping provider", { error });
             }
           }),
         );
 
-        config.logger.info("All providers stopped");
+        logger.info("All providers stopped");
       } catch (error) {
-        config.logger.error("Error during shutdown", { error });
+        logger.error("Error during shutdown", { error });
         throw error;
       }
     };
 
-    config.logger.info("Task management setup complete", {
+    logger.info("Task management setup complete", {
       providerCount: providers.length,
     });
 
@@ -135,13 +149,13 @@ export async function setupProviders(
     };
   } catch (error) {
     // Cleanup on error
-    config.logger.error("Error during setup, cleaning up", { error });
+    logger.error("Error during setup, cleaning up", { error });
 
     try {
       await fileWatcher.stop();
       await Promise.all(providers.map((p) => p.stop()));
     } catch (cleanupError) {
-      config.logger.error("Error during cleanup", { cleanupError });
+      logger.error("Error during cleanup", { cleanupError });
     }
     throw error;
   }
