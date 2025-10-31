@@ -159,7 +159,7 @@ ${testCase.migrationHint}`,
         ],
       },
       {
-        recursionLimit: 50,
+        recursionLimit: 100,
       },
     );
 
@@ -205,7 +205,7 @@ ${testCase.migrationHint}`,
         ],
       },
       {
-        recursionLimit: 50,
+        recursionLimit: 100,
       },
     );
 
@@ -240,8 +240,7 @@ ${testCase.migrationHint}`,
     };
   } catch (error) {
     logger.error("Error in completeness agent", {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
+      error,
     });
     throw error;
   }
@@ -368,7 +367,7 @@ ${testCase.testSelectors?.join(", ") || "Not available"}`,
         ],
       },
       {
-        recursionLimit: 50,
+        recursionLimit: 100,
       },
     );
 
@@ -403,8 +402,7 @@ ${testCase.testSelectors?.join(", ") || "Not available"}`,
     };
   } catch (error) {
     logger.error("Error in functional parity agent", {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
+      error,
     });
     throw error;
   }
@@ -528,7 +526,7 @@ ${testCase.migrationHint}`,
         ],
       },
       {
-        recursionLimit: 50,
+        recursionLimit: 100,
       },
     );
 
@@ -572,8 +570,7 @@ ${testCase.migrationHint}`,
     };
   } catch (error) {
     logger.error("Error in residual effort agent", {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
+      error,
     });
     throw error;
   }
@@ -593,26 +590,50 @@ export async function runEvaluation(input: AgentInput): Promise<{
     runResidualEffortAgent(input),
   ]);
 
-  const [completenessResult, functionalParityResult, residualEffortResult] =
-    results;
+  let completenessResult: AgentResult;
+  let functionalParityResult: AgentResult;
+  let residualEffortResult: AgentResult;
 
-  if (completenessResult.status === "rejected") {
-    throw new Error(`Completeness agent failed: ${completenessResult.reason}`);
+  if (results[0].status === "rejected") {
+    completenessResult = {
+      metric: {
+        reasoning: "",
+        score: 0,
+      },
+      responses: [],
+      error: `Completeness agent failed: ${results[0].reason}`,
+    };
+  } else {
+    completenessResult = results[0].value;
   }
-  if (functionalParityResult.status === "rejected") {
-    throw new Error(
-      `Functional parity agent failed: ${functionalParityResult.reason}`,
-    );
+  if (results[1].status === "rejected") {
+    functionalParityResult = {
+      metric: {
+        reasoning: "",
+        score: 0,
+      },
+      responses: [],
+      error: `Functional parity agent failed: ${results[1].reason}`,
+    };
+  } else {
+    functionalParityResult = results[1].value;
   }
-  if (residualEffortResult.status === "rejected") {
-    throw new Error(
-      `Residual effort agent failed: ${residualEffortResult.reason}`,
-    );
+  if (results[2].status === "rejected") {
+    residualEffortResult = {
+      metric: {
+        reasoning: "",
+        score: 0,
+      },
+      responses: [],
+      error: `Residual effort agent failed: ${results[2].reason}`,
+    };
+  } else {
+    residualEffortResult = results[2].value;
   }
 
   return {
-    completeness: completenessResult.value,
-    functionalParity: functionalParityResult.value,
-    residualEffort: residualEffortResult.value,
+    completeness: completenessResult,
+    functionalParity: functionalParityResult,
+    residualEffort: residualEffortResult,
   };
 }

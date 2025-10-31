@@ -20,6 +20,30 @@ export const orderedJsonFormat = format.printf((info) => {
   return JSON.stringify(ordered);
 });
 
+const enumerateErrorFormat = format((info) => {
+  if (info.error instanceof Error) {
+    info.error = Object.assign(
+      {
+        errorMessage: info.error.message,
+        stack: info.error.stack,
+      },
+      info.error,
+    );
+  }
+
+  if (info instanceof Error) {
+    return Object.assign(
+      {
+        errorMessage: info.message,
+        stack: info.stack,
+      },
+      info,
+    );
+  }
+
+  return info;
+});
+
 export function createOrderedLogger(
   consoleLevel: string = "info",
   fileLevel?: string,
@@ -42,7 +66,11 @@ export function createOrderedLogger(
 
   return createLogger({
     level: "silly", // Set to lowest level, let transports filter
-    format: format.combine(format.timestamp(), orderedJsonFormat),
+    format: format.combine(
+      format.timestamp(),
+      enumerateErrorFormat(),
+      orderedJsonFormat,
+    ),
     transports: loggerTransports,
   });
 }

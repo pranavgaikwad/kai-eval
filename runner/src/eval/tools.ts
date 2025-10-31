@@ -2,18 +2,20 @@ import { promises as fs } from "fs";
 import * as path from "path";
 
 import { tool } from "@langchain/core/tools";
-import { type Task } from "src/taskProviders";
 import { type Logger } from "winston";
 import { z } from "zod";
 
+import { type Task } from "../taskProviders";
 import { type EvaluationToolOptions } from "./types";
 
 export class EvaluationTools {
   constructor(
     private readonly options: EvaluationToolOptions,
     private readonly workspacePath: string,
-    private readonly _logger: Logger,
-  ) {}
+    private readonly logger: Logger,
+  ) {
+    this.logger = logger.child({ module: "EvaluationTools" });
+  }
 
   getAppArchitectureTool() {
     return tool(
@@ -47,6 +49,12 @@ export class EvaluationTools {
         const regex = new RegExp(regexPattern, "i");
         const matchingFiles = targetList.filter((file) => regex.test(file));
 
+        this.logger.debug("Tool list_files called", {
+          matchingFiles,
+          pattern,
+          version: pre_migration ? "pre-migration" : "post-migration",
+        });
+
         return matchingFiles.join("\n");
       },
       {
@@ -76,19 +84,30 @@ export class EvaluationTools {
         const fullPath = path.resolve(this.workspacePath, file_path);
 
         try {
+          let content = "";
           if (pre_migration) {
             // Read from disk (workspace has been reset to pre-migration state)
-            return await fs.readFile(fullPath, "utf-8");
+            content = await fs.readFile(fullPath, "utf-8");
           } else {
             // For post-migration content, use stored content if file was changed,
             // otherwise read from disk (unchanged files)
             if (changedFiles.has(file_path)) {
-              return changedFiles.get(file_path) || "";
+              content = changedFiles.get(file_path) || "";
             } else {
-              return await fs.readFile(fullPath, "utf-8");
+              content = await fs.readFile(fullPath, "utf-8");
             }
           }
+          this.logger.debug("Tool get_file_content called", {
+            path: file_path,
+            version: pre_migration ? "pre-migration" : "post-migration",
+            contentLength: content.length,
+          });
+          return content;
         } catch (error) {
+          this.logger.error("Failed to read file", {
+            file_path,
+            error,
+          });
           throw new Error(`Failed to read file ${file_path}: ${error}`);
         }
       },
@@ -158,6 +177,9 @@ export class EvaluationTools {
           result.unresolvedIssuesAfterMigration =
             groupTasksByUri(unresolvedIssues);
         }
+        this.logger.debug("Tool get_analysis_tasks_diff called", {
+          result,
+        });
         return JSON.stringify(result, null, 2);
       },
       {
@@ -181,9 +203,14 @@ export class EvaluationTools {
         const newIssues = diagnosticsAfter.filter(
           (task) => !beforeIds.has(task.getID()),
         );
+
+        const result = groupTasksByUri(newIssues);
+        this.logger.debug("Tool get_diagnostics_tasks_diff called", {
+          result,
+        });
         return JSON.stringify(
           {
-            newIssuesIdentifiedAfterMigration: groupTasksByUri(newIssues),
+            newIssuesIdentifiedAfterMigration: result,
           },
           null,
           2,

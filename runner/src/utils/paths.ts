@@ -23,7 +23,7 @@ export async function getExcludedPaths(
 
   for (const workspacePath of workspacePaths) {
     try {
-      logger.debug("Processing ignore files for workspace", { workspacePath });
+      logger.silly("Processing ignore files for workspace", { workspacePath });
       const patterns = await getIgnorePatterns(logger, workspacePath);
       if (patterns.length === 0) {
         logger.debug("No ignore patterns found in workspace", {
@@ -31,7 +31,7 @@ export async function getExcludedPaths(
         });
         continue;
       }
-      logger.debug("Found ignore patterns in workspace", {
+      logger.silly("Found ignore patterns in workspace", {
         patternCount: patterns.length,
         workspacePath,
       });
@@ -43,11 +43,19 @@ export async function getExcludedPaths(
         ignore: [],
         followSymbolicLinks: false,
       });
+
+      // Collapse to top-level directories within this workspace
+      const topLevelDirs = collapseToTopLevelDirectories(
+        excludedPaths,
+        workspacePath,
+      );
+
       logger.debug("Resolved excluded paths for workspace", {
-        excludedPathCount: excludedPaths.length,
+        originalPathCount: excludedPaths.length,
+        collapsedPathCount: topLevelDirs.length,
         workspacePath,
       });
-      allExcludedPaths.push(...excludedPaths);
+      allExcludedPaths.push(...topLevelDirs);
     } catch (error) {
       logger.error("Error processing ignore files for workspace", {
         workspacePath,
@@ -60,6 +68,43 @@ export async function getExcludedPaths(
     uniqueExcludedPathCount: uniqueExcludedPaths.length,
   });
   return uniqueExcludedPaths;
+}
+
+/**
+ * Collapses a list of file and directory paths to their top-level directories
+ * relative to the workspace path.
+ *
+ * @param paths Array of absolute paths to collapse
+ * @param workspacePath The workspace root path
+ * @returns string[] Array of top-level directory paths
+ */
+function collapseToTopLevelDirectories(
+  paths: string[],
+  workspacePath: string,
+): string[] {
+  const topLevelDirs = new Set<string>();
+
+  for (const fullPath of paths) {
+    // Get relative path from workspace
+    const relativePath = path.relative(workspacePath, fullPath);
+
+    // Skip if path is outside workspace or is the workspace itself
+    if (relativePath.startsWith("..") || relativePath === "") {
+      continue;
+    }
+
+    // Get the first segment of the relative path (top-level directory)
+    const pathSegments = relativePath.split(path.sep);
+    const topLevelDir = pathSegments[0];
+
+    if (topLevelDir) {
+      // Convert back to absolute path
+      const topLevelAbsolutePath = path.join(workspacePath, topLevelDir);
+      topLevelDirs.add(topLevelAbsolutePath);
+    }
+  }
+
+  return Array.from(topLevelDirs);
 }
 
 /**
@@ -113,7 +158,7 @@ function parseIgnoreFileContent(logger: Logger, content: string): string[] {
       return true;
     })
     .map((pattern) => {
-      logger.debug("Parsed ignore pattern", { pattern });
+      logger.silly("Parsed ignore pattern", { pattern });
       return pattern;
     });
 }
@@ -216,9 +261,15 @@ export async function getChangedFiles(
   workspacePath: string,
 ): Promise<string[]> {
   try {
-    const { stdout } = await execAsync("git diff --name-only", {
+    await execAsync("git add .", {
       cwd: workspacePath,
     });
+    const { stdout } = await execAsync(
+      "git diff --staged --name-only --relative",
+      {
+        cwd: workspacePath,
+      },
+    );
 
     const changedFiles = stdout
       .trim()
@@ -235,7 +286,7 @@ export async function getChangedFiles(
   } catch (error) {
     logger.debug("No git repository or no changes found", {
       workspacePath,
-      error: error instanceof Error ? error.message : String(error),
+      error,
     });
     return [];
   }

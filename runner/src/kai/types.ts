@@ -23,7 +23,7 @@ export interface KaiWorkflowManagerOptions {
   solutionServerClient: SolutionServerClient;
   fsCache: InMemoryCacheWithRevisions<string, string>;
   toolCache: FileBasedResponseCache<Record<string, unknown>, string>;
-  filterTasksFunc?: AgentTasksProviderFunction;
+  filterTasksFunc?: TasksInteractionResolver;
 }
 
 export interface FilteredTask {
@@ -31,6 +31,6 @@ export interface FilteredTask {
   task: string;
 }
 
-export type AgentTasksProviderFunction = (
+export type TasksInteractionResolver = (
   taskManeger: TaskManager,
 ) => Promise<FilteredTask[]>;

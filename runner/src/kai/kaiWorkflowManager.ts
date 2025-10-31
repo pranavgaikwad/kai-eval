@@ -17,8 +17,7 @@ import type { Logger } from "winston";
 
 import { type TaskManager } from "../taskManager";
 import {
-  type FilteredTask,
-  type AgentTasksProviderFunction,
+  type TasksInteractionResolver,
   type KaiWorkflowManagerOptions,
 } from "./types";
 
@@ -43,7 +42,7 @@ export class KaiWorkflowManager {
   });
   private buffer: AIMessageChunk = this.defaultBuffer;
   private traceDir: string;
-  private filterTasksFunction: AgentTasksProviderFunction = getFilteredTasks;
+  private tasksInteractionResolver: TasksInteractionResolver | undefined;
 
   constructor(
     private readonly logger: Logger,
@@ -56,6 +55,9 @@ export class KaiWorkflowManager {
   }
 
   async init(options: KaiWorkflowManagerOptions): Promise<void> {
+    if (!options.filterTasksFunc) {
+      throw new Error("filterTasksFunc is required");
+    }
     try {
       await fs.mkdir(this.traceDir, { recursive: true });
       this.logger.info("Using trace directory", { traceDir: this.traceDir });
@@ -71,9 +73,7 @@ export class KaiWorkflowManager {
       this.workspaceDir = options.workspaceDir;
       await this.workflow.init(initOptions);
       this.setupEventHandlers();
-      if (options.filterTasksFunc) {
-        this.filterTasksFunction = options.filterTasksFunc;
-      }
+      this.tasksInteractionResolver = options.filterTasksFunc;
       this.isInitialized = true;
       this.logger.info("Kai workflow initialized successfully");
     } catch (error) {
@@ -203,7 +203,7 @@ export class KaiWorkflowManager {
   private handleUserInteraction(message: KaiWorkflowMessage): void {
     if (message.type === KaiWorkflowMessageType.UserInteraction) {
       const interaction = message.data as KaiUserInteraction;
-      this.logger.info("User interaction required", {
+      this.logger.debug("User interaction required", {
         messageId: message.id,
         interactionType: interaction.type,
         systemMessage: interaction.systemMessage,
@@ -283,7 +283,7 @@ export class KaiWorkflowManager {
         break;
       case "tasks":
         try {
-          const filteredTasks = await this.filterTasksFunction(
+          const filteredTasks = await this.tasksInteractionResolver!(
             this.taskManager,
           );
           this.logger.info("Filtered tasks for user interaction", {
@@ -320,39 +320,4 @@ export class KaiWorkflowManager {
     this.logger.debug("Resolving user interaction", { updatedMsg });
     await this.workflow.resolveUserInteraction(updatedMsg);
   }
-}
-
-async function getFilteredTasks(
-  taskManager: TaskManager,
-): Promise<FilteredTask[]> {
-  const taskSnapshot = await taskManager.getTasks();
-  const compareResult = taskManager.getTasksDiff(taskSnapshot);
-  const currentTasks = Array.from(compareResult.added);
-
-  const filteredTasks = currentTasks.filter((task) => {
-    const frequency = taskManager.getTaskFrequency(
-      taskManager.getLatestSnapshotId(),
-      task.getID(),
-    );
-    return frequency < 3;
-  });
-
-  const seen = new Set<string>();
-  const uniqueTasks = filteredTasks.filter((task) => {
-    const key = `${task.getUri()}::${task.toString()}`;
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-
-  return Array.from(
-    new Set(
-      uniqueTasks.map((task) => ({
-        uri: task.getUri(),
-        task: task.toString(),
-      })),
-    ),
-  );
 }

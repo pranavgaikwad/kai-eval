@@ -19,7 +19,7 @@ description: |
   - src/main/java/com/redhat/coolstore/service/ShippingService.java
 rules:
   - ruleset: quarkus/springboot
-    rule: jms-to-reactive-quarkus-00050
+    rule: remote-ejb-to-quarkus-00000
 testSelectors:
   - ShippingServiceMigrationE2ETest
 migrationHint: Java EE to Quarkus

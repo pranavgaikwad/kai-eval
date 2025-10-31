@@ -43,27 +43,6 @@ describe("Evaluation Runner Integration Tests", () => {
         path.join(logDir, "eval-runner-test.log"),
       );
 
-      coolstoreProjectPath = path.join(testDataPath, "coolstore");
-
-      try {
-        await fs.rm(coolstoreProjectPath, { recursive: true, force: true });
-      } catch (error) {
-        // Directory doesn't exist
-      }
-
-      logger.info("Cloning coolstore repository...");
-      try {
-        execSync(
-          `git clone https://github.com/konveyor-ecosystem/coolstore.git ${coolstoreProjectPath}`,
-          { stdio: "pipe", timeout: 60000 },
-        );
-      } catch (error) {
-        throw new Error(`Failed to clone coolstore repository: ${error}`);
-      }
-
-      const pomPath = path.join(coolstoreProjectPath, "pom.xml");
-      await fs.access(pomPath);
-
       if (!config.jdtlsBinaryPath) {
         throw new Error("JDTLS binary path not configured in .config.json");
       }
@@ -91,7 +70,7 @@ describe("Evaluation Runner Integration Tests", () => {
       evalSetup = await setupKaiEval({
         config: {
           ...config,
-          workspacePaths: [coolstoreProjectPath],
+          workspacePaths: [],
           targets: ["quarkus", "jakarta-ee", "cloud-readiness"],
           sources: [],
           logLevel: config.logLevel || { console: "info", file: "debug" },
@@ -105,14 +84,9 @@ describe("Evaluation Runner Integration Tests", () => {
     } catch (error) {
       setupError = error as Error;
       logger?.error("Setup failed, attempting cleanup", { error });
-      await shutdown(logger, evalSetup, coolstoreProjectPath);
       throw setupError;
     }
   }, 180000); // 3 minutes timeout for setup
-
-  afterEach(async () => {
-    await shutdown(logger, evalSetup, coolstoreProjectPath);
-  });
 
   it("should successfully setup evaluation runner and run mock test cases", async () => {
     // Verify evaluation runner setup
@@ -165,6 +139,7 @@ describe("Evaluation Runner Integration Tests", () => {
           ),
           "utf-8",
         ),
+        timeoutMs: 600000,
       },
     ];
 
@@ -177,8 +152,8 @@ describe("Evaluation Runner Integration Tests", () => {
     const results = await evalSetup.evaluationRunner.run(mockTestCases, {
       variants: [
         {
-          name: "basic",
-          agentMode: false,
+          name: "agent",
+          agentMode: true,
         },
       ],
     });
@@ -241,21 +216,3 @@ describe("Evaluation Runner Integration Tests", () => {
     });
   }, 1200000); // 20 minutes timeout for test execution
 });
-
-async function shutdown(
-  logger: Logger,
-  evalSetup: KaiEvalSetupResult,
-  coolstoreProjectPath: string,
-): Promise<void> {
-  // Note: The evaluation runner handles its own cleanup internally
-  // Each test case execution manages its own KaiRunner lifecycle
-
-  if (process.env.TEST_NO_CLEANUP !== "true") {
-    try {
-      await fs.rm(coolstoreProjectPath, { recursive: true, force: true });
-      logger?.info("Cleanup completed - removed coolstore directory");
-    } catch (error) {
-      logger?.warn("Failed to clean up coolstore directory", { error });
-    }
-  }
-}

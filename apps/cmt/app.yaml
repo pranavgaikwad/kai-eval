@@ -1,12 +1,11 @@
 ---
 name: cmt
-language: java
-source_code:
-  git:
-    url: https://github.com/pranavgaikwad/cmt
-    branch: main
+sourceCode:
+  type: git
+  url: https://github.com/pranavgaikwad/cmt
+  branch: main
 targets:
   - quarkus
   - jakarta-ee
-  - cloud-readiness
+programmingLanguage: Java
 

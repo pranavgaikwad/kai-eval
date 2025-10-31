@@ -1,4 +1,5 @@
 ---
+app: springframework-demo
 name: security-config
 description: |
   WebSecurityConfigurerAdapter has been removed in Spring Security 6.0
@@ -44,6 +45,8 @@ description: |
   These issues were found in files:
   - src/main/java/com/redhat/mta/examples/spring/framework/security/SecurityConfig.java
 rules:
-- spring-framework-5.x-to-6.0-security-00001
+- rule: spring-framework-5.x-to-6.0-security-00001
+  ruleset: spring-framework
 testSelectors:
 - SecurityConfigE2ETest
+migrationHint: Spring Framework 5 to 6

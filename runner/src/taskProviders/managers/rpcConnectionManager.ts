@@ -38,6 +38,9 @@ export class RPCConnectionManager {
   private connection?: MessageConnection;
   private documentVersions = new Map<string, number>();
   private openedDocuments = new Set<string>();
+  private socket?: net.Socket;
+  private reader?: StreamMessageReader;
+  private writer?: StreamMessageWriter;
 
   constructor(private readonly logger: Logger) {}
 
@@ -54,6 +57,9 @@ export class RPCConnectionManager {
 
     const reader = new StreamMessageReader(socket);
     const writer = new StreamMessageWriter(socket);
+    this.socket = socket;
+    this.reader = reader;
+    this.writer = writer;
     this.connection = createMessageConnection(reader, writer);
 
     this.connection.listen();
@@ -272,9 +278,30 @@ export class RPCConnectionManager {
   }
 
   async disconnect(): Promise<void> {
-    if (this.connection) {
-      this.connection.dispose();
-      this.connection = undefined;
+    try {
+      if (this.connection) {
+        this.connection.dispose();
+        this.connection = undefined;
+      }
+    } finally {
+      try {
+        if (this.writer) {
+          // underlying stream will be closed via socket.end/destroy
+          this.writer = undefined;
+        }
+        if (this.reader) {
+          this.reader = undefined;
+        }
+        if (this.socket) {
+          // Try graceful end first, then force destroy
+          this.socket.end();
+          this.socket.destroy();
+          this.socket.unref?.();
+          this.socket = undefined;
+        }
+      } catch (error) {
+        this.logger.error("Error during socket disconnect", { error });
+      }
     }
   }
 }

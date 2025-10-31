@@ -20,9 +20,7 @@ describe("Evaluation Component and Integration Tests", () => {
       expect(testCases).toBeDefined();
       expect(Array.isArray(testCases)).toBe(true);
     } catch (error) {
-      logger.error(
-        `Failed to parse test cases: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
+      logger.error("Failed to parse test cases", { error });
       throw error;
     }
   }, 10000);

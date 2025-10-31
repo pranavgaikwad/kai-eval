@@ -147,7 +147,7 @@ export class AnalysisTasksProvider
 
   async stop(): Promise<void> {
     this.logger.info("Stopping analysis provider");
-
+    await this.debouncer.flush();
     await this.connectionManager.disconnect();
     await this.jdtlsConnectionManager.disconnect();
     await this.processManager.terminate();

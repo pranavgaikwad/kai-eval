@@ -2,7 +2,6 @@
 
 ## Summary
 
-**Issue ID**: Remote EJB Migration
 **Target Technology**: Quarkus
 **Change Contract**: Replace `@Remote` EJB with REST service and create dedicated `@RestClient` interface. This approach preserves the original business interface while creating a clean REST client layer for transport concerns.
 

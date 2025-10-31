@@ -75,7 +75,7 @@ export class AnalysisTask implements Task {
   constructor(private readonly incident: AnalysisIncident) {}
 
   getID(): string {
-    const data = `${this.incident.uri}:${this.incident.ruleSet}:${this.incident.rule}:${this.incident.category}:${this.incident.message}:${this.incident.lineNumber || 0}`;
+    const data = `${this.incident.uri}:${this.incident.ruleSet}:${this.incident.rule}:${this.incident.category}:${this.incident.message}`;
     return crypto.createHash("sha256").update(data).digest("hex");
   }
 

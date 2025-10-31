@@ -2,24 +2,23 @@
 
 ## Summary
 
-**Issue ID**: JMS-QUARKUS-001
 **Title**: Replace JavaEE/JakartaEE JMS with Quarkus SmallRye/Microprofile equivalents
 **Target Technology**: Quarkus with SmallRye Reactive Messaging
 **Change Contract**: Replace javax.jms.* imports and JMS MessageDriven beans with SmallRye Reactive Messaging annotations (@Incoming/@Outgoing), JMSContext/Topic resources with Emitter/Channel, and update dependencies from jboss-jms-api to quarkus-smallrye-reactive-messaging.
 
 ## Affected Surface Area
 
-### Components/modules touched:
+### Components/modules touched
 - **Message Producers**: ShoppingCartOrderProcessor (src/main/java/com/redhat/coolstore/service/ShoppingCartOrderProcessor.java)
 - **Message Consumers**: OrderServiceMDB, InventoryNotificationMDB
 - **Dependencies**: Maven pom.xml JMS specifications
 - **Configuration**: Topic/destination configuration (currently in README deployment scripts)
 
-### Entry points and public APIs:
+### Entry points and public APIs
 - **ShoppingCartService.checkOutShoppingCart()**: Indirectly affected (calls ShoppingCartOrderProcessor.process())
 - **CartEndpoint.checkout()**: Indirectly affected through ShoppingCartService
 
-### Direct vs. indirect occurrences:
+### Direct vs. indirect occurrences
 - **Direct JMS usage**:
   - OrderServiceMDB.java:6-9 (javax.jms imports)
   - OrderServiceMDB.java:14-17 (@MessageDriven, @ActivationConfigProperty)

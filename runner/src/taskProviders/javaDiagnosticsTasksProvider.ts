@@ -125,6 +125,10 @@ export class JavaDiagnosticsTasksProvider
     await this.jdtlsConnectionManager.connectToPipe(pipeName);
     this.jdtlsConnectionManager.onDiagnostics((params) => {
       this.diagnosticsManager.updateData(params.uri, params.diagnostics);
+      this.logger.debug("Received java diagnostics update", {
+        uri: params.uri,
+        diagnosticsCount: params.diagnostics.length,
+      });
 
       // Handle pending diagnostics update promise
       if (this.diagnosticsUpdatePromise) {
@@ -176,6 +180,7 @@ export class JavaDiagnosticsTasksProvider
   }
 
   async stop(): Promise<void> {
+    await this.debouncer.flush();
     await this.jdtlsConnectionManager.disconnect();
     await this.processManager.terminate();
 

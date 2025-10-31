@@ -11,10 +11,7 @@ import {
   type KaiRunnerSetupResult,
   type RunKaiWorkflowInput,
 } from "./types";
-import {
-  type KaiWorkflowManager,
-  type AgentTasksProviderFunction,
-} from "../kai";
+import { type KaiWorkflowManager, type TasksInteractionResolver } from "../kai";
 import { TaskManager } from "../taskManager";
 import { AnalysisTask } from "../taskProviders";
 import type { KaiRunnerConfig } from "../types";
@@ -24,7 +21,7 @@ export async function setupKaiRunner(
   config: KaiRunnerConfig,
   env: Record<string, string> = process.env as Record<string, string>,
   storeSnapshots: boolean = false,
-  filterTasksFunc?: AgentTasksProviderFunction,
+  filterTasksFunc?: TasksInteractionResolver,
 ): Promise<KaiRunnerSetupResult> {
   // Validate required configuration
   if (!config.workspacePaths || config.workspacePaths.length === 0) {
@@ -108,7 +105,7 @@ export async function setupKaiRunner(
     env,
     solutionServerUrl: config.solutionServerUrl,
     logDir,
-    filterTasksFunc,
+    tasksUserInteractionFunction: filterTasksFunc,
   };
 
   const kaiSetup = await setupKaiWorkflow(kaiConfig);
@@ -157,21 +154,11 @@ export function getKaiWorkflowStarterFunction(
   return async (inp: RunKaiWorkflowInput) => {
     // get analysis tasks and ensure given issues are present in analysis tasks
     const snapshotId = await taskManager.getTasks();
-    const compareResult = taskManager.getTasksDiff(snapshotId);
-    if (
-      !compareResult ||
-      (!compareResult.added.length && !compareResult.unresolved.length)
-    ) {
+    const tasks = taskManager.getAllTasksForSnapshot(snapshotId);
+    if (!tasks.length) {
       throw new Error("No analysis tasks found");
     }
-    // filter tasks of type AnalysisTask
-    const analysisTasks: AnalysisTask[] = compareResult.added.filter(
-      (task) => task instanceof AnalysisTask,
-    );
-    const unresolvedAnalysisTasks = compareResult.unresolved.filter(
-      (task) => task instanceof AnalysisTask,
-    );
-    const allTasks = [...analysisTasks, ...unresolvedAnalysisTasks];
+    const allTasks = tasks.filter((task) => task instanceof AnalysisTask);
     const foundAnalysisTasks = allTasks.filter((task) =>
       inp.data.rules.some(
         (rule) =>

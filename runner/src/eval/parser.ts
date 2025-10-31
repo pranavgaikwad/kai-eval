@@ -303,6 +303,11 @@ async function parseTestCase(
     );
   }
 
+  const timeoutMs = obj.timeoutMs;
+  if (timeoutMs !== undefined && typeof timeoutMs !== "number") {
+    throw new ValidationError("Expected number", filePath, "timeoutMs");
+  }
+
   let notes = "";
   try {
     notes = await fs.readFile(
@@ -325,6 +330,7 @@ async function parseTestCase(
     testSelectors: testSelectors.length > 0 ? testSelectors : undefined,
     application: applications.get(appName) as TestApplication,
     notes,
+    timeoutMs: timeoutMs ?? 600000,
   };
 }
 

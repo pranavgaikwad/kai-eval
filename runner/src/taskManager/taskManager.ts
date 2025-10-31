@@ -4,8 +4,17 @@ import * as path from "path";
 
 import { type Logger } from "winston";
 
-import type { TaskSnapshotDiff, TaskSnapshot } from "./types";
-import { type TaskProvider, type Task } from "../taskProviders";
+import type { TaskSnapshot } from "./types";
+import {
+  type TaskProvider,
+  type Task,
+  type VersionedTasks,
+} from "../taskProviders";
+
+interface GetTasksOptions {
+  timeoutMs?: number;
+  retryIntervalMs?: number;
+}
 
 export class TaskManager {
   private providers: TaskProvider[] = [];
@@ -39,21 +48,101 @@ export class TaskManager {
     }
   }
 
-  async getTasks(): Promise<number> {
-    const snapshotId = this.generateSnapshotId();
-    const providerResults = await Promise.all(
-      this.providers.map(async (provider) => {
-        const versionedTasks = await provider.getCurrentTasks();
-        return {
-          providerName: provider.name,
-          versionedTasks,
-        };
-      }),
-    );
+  async getTasks(options?: GetTasksOptions): Promise<number> {
+    const timeoutMs = options?.timeoutMs || 30000; // 30 second default
+    const retryIntervalMs = options?.retryIntervalMs || 1000; // 1 second default
 
+    const lastSnapshot =
+      this.snapshotCounter > 0
+        ? this.snapshots.get(this.snapshotCounter)
+        : null;
+
+    // If no previous snapshot exists, get tasks from all providers
+    if (!lastSnapshot) {
+      const providerResults = await Promise.all(
+        this.providers.map(async (provider) => {
+          const versionedTasks = await provider.getCurrentTasks();
+          return {
+            providerName: provider.name,
+            versionedTasks,
+          };
+        }),
+      );
+      return this.processProviderResults(providerResults);
+    }
+
+    const startTime = Date.now();
+    const providersNeedingUpdate = new Set(this.providers.map((p) => p.name));
+    const providerResults = new Map<
+      string,
+      { providerName: string; versionedTasks: VersionedTasks }
+    >();
+
+    while (
+      Date.now() - startTime < timeoutMs &&
+      providersNeedingUpdate.size > 0
+    ) {
+      // Only query providers that still need updates
+      const providersToQuery = this.providers.filter((p) =>
+        providersNeedingUpdate.has(p.name),
+      );
+
+      const batchResults = await Promise.all(
+        providersToQuery.map(async (provider) => {
+          const versionedTasks = await provider.getCurrentTasks();
+          return { providerName: provider.name, versionedTasks };
+        }),
+      );
+
+      // Check which providers returned updated generation IDs
+      for (const result of batchResults) {
+        const currentGenId = result.versionedTasks.generationId;
+        const lastGenId = lastSnapshot.providerGenerationIDs.get(
+          result.providerName,
+        );
+        providerResults.set(result.providerName, result);
+        // if we didn't get the latest tasks, we will retry for this provider
+        if (!lastGenId || currentGenId !== lastGenId) {
+          providersNeedingUpdate.delete(result.providerName);
+          this.logger.debug("Provider returned updated generation ID", {
+            providerName: result.providerName,
+            currentGenId,
+            lastGenId,
+            tasks: result.versionedTasks.tasks.length,
+          });
+        }
+      }
+
+      if (providersNeedingUpdate.size === 0) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, retryIntervalMs));
+    }
+
+    // If not all providers updated, return the last snapshot ID
+    if (providersNeedingUpdate.size > 0) {
+      this.logger.warn(
+        "Not all providers returned updated generation IDs within timeout. Results could be out-of-date.",
+        {
+          providersStillPending: Array.from(providersNeedingUpdate),
+          timeoutMs,
+          lastSnapshotId: this.snapshotCounter,
+        },
+      );
+    }
+
+    // All providers updated - create new snapshot
+    return this.processProviderResults(Array.from(providerResults.values()));
+  }
+
+  private async processProviderResults(
+    providerResults: { providerName: string; versionedTasks: VersionedTasks }[],
+  ): Promise<number> {
     const providerGenerationIDs = new Map<string, number>();
     let totalTasks = 0;
     let newTasksStored = 0;
+
     for (const { providerName, versionedTasks } of providerResults) {
       const currGenId = versionedTasks.generationId;
       providerGenerationIDs.set(providerName, currGenId);
@@ -72,6 +161,7 @@ export class TaskManager {
       });
     }
 
+    const snapshotId = this.generateSnapshotId();
     const snapshot: TaskSnapshot = {
       id: snapshotId,
       timestamp: new Date(),
@@ -112,6 +202,7 @@ export class TaskManager {
         ),
       );
     }
+
     this.snapshots.set(snapshotId, snapshot);
     return snapshotId;
   }
@@ -151,93 +242,41 @@ export class TaskManager {
     return count;
   }
 
-  getTasksDiff(snapshotId: number): TaskSnapshotDiff {
-    const currentSnapshot = this.snapshots.get(snapshotId);
-    this.logger.silly("Getting tasks diff", {
-      snapshotId,
-      providerGenerationIDs: Array.from(
-        currentSnapshot?.providerGenerationIDs.entries() || [],
-      ).map(([providerName, generationId]) => ({
-        providerName,
-        generationId,
-      })),
-    });
-
-    if (!currentSnapshot) {
-      throw new Error("Snapshot not found");
-    }
-
-    const resolved: Task[] = [];
-    const added: Task[] = [];
-    const unresolved: Task[] = [];
-
-    for (const [
-      providerName,
-      currentGenerationId,
-    ] of currentSnapshot.providerGenerationIDs) {
-      const storedProviderTasks = this.tasksStore.get(providerName);
-
-      if (!storedProviderTasks) {
-        continue;
-      }
-      // find stored tasks for the current generation ID
-      const currentTasks = storedProviderTasks.get(currentGenerationId) || [];
-      let lastGenerationId = -1;
-      for (const availableGenerationId of storedProviderTasks.keys()) {
-        if (availableGenerationId < currentGenerationId) {
-          lastGenerationId = Math.max(lastGenerationId, availableGenerationId);
-        }
-      }
-      if (lastGenerationId == -1) {
-        // Last generation not found - all current tasks are added
-        this.logger.silly("Last generation not found, all tasks are new", {
-          providerName,
-          currentGenerationId,
-          lastGenerationId,
-          currentTasks: currentTasks.map((task) => task.getID()),
-        });
-        added.push(...currentTasks);
-      } else {
-        // Last generation found - compute diff between last and current
-        this.logger.silly("Last generation found, computing diff", {
-          providerName,
-          currentGenerationId,
-          lastGenerationId,
-          currentTasks: currentTasks.map((task) => task.getID()),
-        });
-        const lastTasks = storedProviderTasks.get(lastGenerationId) || [];
-        const lastTaskIds = new Set(lastTasks.map((task) => task.getID()));
-        const currentTaskIds = new Set(
-          currentTasks.map((task) => task.getID()),
-        );
-
-        // Find resolved tasks (in last but not in current)
-        for (const task of lastTasks) {
-          if (!currentTaskIds.has(task.getID())) {
-            resolved.push(task);
-          } else {
-            unresolved.push(task);
-          }
-        }
-
-        // Find added tasks (in current but not in last)
-        for (const task of currentTasks) {
-          if (!lastTaskIds.has(task.getID())) {
-            added.push(task);
-          }
-        }
-      }
-    }
-    this.logger.silly("Tasks diff computed", {
-      resolved: resolved.length,
-      added: added.length,
-      unresolved: unresolved.length,
-    });
-    return { resolved, added, unresolved };
-  }
-
   public getLatestSnapshotId(): number {
     return this.snapshotCounter;
+  }
+
+  public getSnapshot(snapshotId: number): TaskSnapshot | undefined {
+    return this.snapshots.get(snapshotId);
+  }
+
+  public reset(): void {
+    this.snapshots.clear();
+    this.tasksStore.clear();
+    this.snapshotCounter = 0;
+    this.logger.debug("TaskManager state reset");
+  }
+
+  public getAllTasksForSnapshot(snapshotId: number): Task[] {
+    const snapshot = this.snapshots.get(snapshotId);
+    if (!snapshot) {
+      this.logger.warn("Snapshot not found when getting all tasks", {
+        snapshotId,
+      });
+      return [];
+    }
+
+    return Array.from(snapshot.providerGenerationIDs.entries()).flatMap(
+      ([providerName, generationId]) => {
+        const providerTasks = this.tasksStore.get(providerName);
+        return providerTasks?.get(generationId) || [];
+      },
+    );
+  }
+
+  public getBaselineSnapshotId(): number {
+    // Return the first snapshot ID (after reset this would be 1)
+    return 1;
   }
 
   private generateSnapshotId(): number {

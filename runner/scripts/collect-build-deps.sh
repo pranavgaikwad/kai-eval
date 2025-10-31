@@ -44,7 +44,6 @@ if [ -n "$PATH_EDITOR_EXTENSIONS" ] && [ -d "$PATH_EDITOR_EXTENSIONS" ]; then
     # Pack shared package
     echo "Packaging shared module..."
     cd shared
-
     # Temporarily add files field to package.json to include dist directory
     if [ -f "package.json" ]; then
         cp package.json package.json.backup
@@ -55,23 +54,28 @@ if [ -n "$PATH_EDITOR_EXTENSIONS" ] && [ -d "$PATH_EDITOR_EXTENSIONS" ]; then
         require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
         "
     fi
-
     npm pack
-
     # Restore original package.json
     if [ -f "package.json.backup" ]; then
         mv package.json.backup package.json
     fi
-
     SHARED_TARBALL=$(ls editor-extensions-shared-*.tgz 2>/dev/null | head -n 1)
     if [ -z "$SHARED_TARBALL" ]; then
         echo "Error: No shared tarball found"
         exit 1
     fi
-
     # Pack agentic package
     echo "Packaging agentic module..."
     cd ../agentic
+    if [ -f "package.json" ]; then
+        cp package.json package.json.backup
+        # Add files field to include dist directory
+        node -e "
+        const pkg = JSON.parse(require('fs').readFileSync('package.json', 'utf8'));
+        pkg.files = ['dist', 'src', 'package.json'];
+        require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+        "
+    fi
     npm pack
     AGENTIC_TARBALL=$(ls editor-extensions-agentic-*.tgz 2>/dev/null | head -n 1)
     if [ -z "$AGENTIC_TARBALL" ]; then
@@ -114,10 +118,10 @@ else
         npm run build -w agentic
     fi
 
+
     # Pack shared package
     echo "Packaging shared module..."
     cd shared
-
     # Temporarily add files field to package.json to include dist directory
     if [ -f "package.json" ]; then
         cp package.json package.json.backup
@@ -128,14 +132,7 @@ else
         require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
         "
     fi
-
     npm pack
-
-    # Restore original package.json
-    if [ -f "package.json.backup" ]; then
-        mv package.json.backup package.json
-    fi
-
     SHARED_TARBALL=$(ls editor-extensions-shared-*.tgz 2>/dev/null | head -n 1)
     if [ -z "$SHARED_TARBALL" ]; then
         echo "❌ Error: No tarball found for shared/ module"
@@ -145,6 +142,16 @@ else
     # Pack agentic package
     echo "Packaging agentic module..."
     cd ../agentic
+    # Temporarily add files field to package.json to include dist directory
+    if [ -f "package.json" ]; then
+        cp package.json package.json.backup
+        # Add files field to include dist directory
+        node -e "
+        const pkg = JSON.parse(require('fs').readFileSync('package.json', 'utf8'));
+        pkg.files = ['dist', 'src', 'package.json'];
+        require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+        "
+    fi
     npm pack
     AGENTIC_TARBALL=$(ls editor-extensions-agentic-*.tgz 2>/dev/null | head -n 1)
     if [ -z "$AGENTIC_TARBALL" ]; then

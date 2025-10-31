@@ -138,9 +138,8 @@ describe("Evaluation Agents Tests", () => {
     logger.info("Starting agents evaluation test");
 
     const snapshotIdBefore = await kaiRunnerSetup.taskManager.getTasks();
-    const diffBefore =
-      kaiRunnerSetup.taskManager.getTasksDiff(snapshotIdBefore);
-    const tasksBefore = [...diffBefore.added, ...diffBefore.unresolved];
+    const tasksBefore =
+      kaiRunnerSetup.taskManager.getAllTasksForSnapshot(snapshotIdBefore);
 
     const analysisTasksBefore = tasksBefore.filter(
       (task) => task instanceof AnalysisTask,
@@ -187,13 +186,11 @@ describe("Evaluation Agents Tests", () => {
     const fileListAfter = await getAllFiles(logger, coolstoreProjectPath);
 
     const snapshotIdAfter = await kaiRunnerSetup.taskManager.getTasks();
-    const diffAfter = kaiRunnerSetup.taskManager.getTasksDiff(snapshotIdAfter);
-    const tasksAfter = [...diffAfter.added, ...diffAfter.unresolved];
-
+    const tasksAfter =
+      kaiRunnerSetup.taskManager.getAllTasksForSnapshot(snapshotIdAfter);
     const analysisTasksAfter = tasksAfter.filter(
       (task) => task instanceof AnalysisTask,
     );
-
     const diagnosticsTasksAfter = tasksAfter.filter(
       (task) => task instanceof DiagnosticTask,
     );
@@ -252,6 +249,7 @@ describe("Evaluation Agents Tests", () => {
         ),
         "utf-8",
       ),
+      timeoutMs: 600000,
     };
 
     const evaluationOptions: EvaluationToolOptions = {

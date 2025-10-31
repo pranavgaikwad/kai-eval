@@ -28,7 +28,7 @@ export async function setupKaiWorkflow(
     }
     const modelConfig = config.modelConfig;
 
-    logger.info("Creating model provider", {
+    logger.silly("Creating model provider", {
       provider: modelConfig.provider,
       modelArgs: Object.keys(modelConfig.args),
     });
@@ -80,7 +80,7 @@ export async function setupKaiWorkflow(
       solutionServerClient,
       fsCache,
       toolCache,
-      filterTasksFunc: config.filterTasksFunc,
+      filterTasksFunc: config.tasksUserInteractionFunction,
     };
 
     logger.info("Initializing Kai workflow");

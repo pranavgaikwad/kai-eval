@@ -1,10 +1,12 @@
-# Kai Runner
+# Kai Eval Runner
 
-A TypeScript-based CLI tool for AI-driven code migration and analysis. Kai Runner orchestrates task providers to analyze Java codebases, detect migration issues, and generate automated fixes using large language models.
+A TypeScript-based CLI tool for performing and evaluating AI-driven code migration and analysis.
 
-Two entrypoints:
-- **Generation**: CLI to generate Kai fixes
-- **Evaluation**: CLI to generate and evaluate Kai fixes (InProgress...)
+There are two main components of this project:
+- **Evaluation**:
+  - CLI to evaluate Kai responses that can work with Vscode IDE extension as well as a standalone Kai runner.
+- **[WIP] Standalone kai**:
+  - CLI that runs Kai to fix a given set of migration issues in the project.
 
 ## Index
 
@@ -28,13 +30,54 @@ podman build -t localhost/kai-runner:latest .
 
 There are scripts available to run the container for each of the entrypoints.
 
+#### Running Kai evaluation
+
+To run Kai evaluation with configuration for the container, run:
+
+```bash
+./scripts/run-kai-eval-container.sh -c .config.container.json -e .env -t <PATH_TO_TESTS>
+```
+
+All options:
+
+- `-e, --env-file PATH` - Required: Path to environment file
+- `-t, --test-paths PATHS` - Required: Comma-separated paths to test directories
+- `-c, --config PATH` - Path to JSON configuration file (default: .config.container.json)
+- `--output-dir PATH` - Path to directory for output files (default: ./eval-results)
+- `--artifacts-path PATH` - Path to directory for evaluation artifacts (not mounted by default)
+- `--test-selectors LIST` - Comma-separated test selectors in format `<app_name>#<test_name>,...`
+- `-i, --image NAME` - Podman image name (default: localhost/kai-runner)
+- `--tag TAG` - Podman image tag (default: latest)
+- `-h, --help` - Show help message
+
+Examples:
+```bash
+# Basic usage
+./scripts/run-kai-eval-container.sh -e .env -c .config.container.json -t path/to/tests
+
+# With specific test selectors and output directory
+./scripts/run-kai-eval-container.sh -e .env -c .config.container.json -t path/to/tests \
+  --output-dir ./results \
+  --test-selectors "coolstore#remote-ejb-to-rest,coolstore#jms-to-smallrye"
+
+# With artifacts directory mounting
+./scripts/run-kai-eval-container.sh -e .env -c .config.container.json -t path/to/tests \
+  --artifacts-path ./artifacts \
+  --output-dir ./results
+
+# With custom image name and tag
+./scripts/run-kai-eval-container.sh -e .env -c .config.container.json -t path/to/tests \
+  -i localhost/kai-runner --tag latest
+```
+
+#### Running standalone Kai runner (In progress...)
+
 To generate Kai fixes, run:
 
 ```bash
 ./scripts/run-kai-fix-container.sh -w /path/to/java/project --targets quarkus,cloud-readiness
 ```
-
-**Available options for run-kai-fix-container.sh:**
+All options:
 
 - `-w, --workspace PATH` - Required: Path to Java project workspace to analyze
 - `-l, --logs PATH` - Path to directory for log files (default: ./logs)
@@ -55,20 +98,25 @@ To generate Kai fixes, run:
 ./scripts/run-kai-fix-container.sh -w /path/to/project --targets quarkus3 --sources eap7
 
 # With custom logs and analyzer
-./scripts/run-kai-fix-container.sh -w /path/to/project -l ./logs -a /path/to/kai-analyzer
+./scripts/run-kai-fix-container.sh -w /path/to/project -l ./logs -a /path/to/kai-analyzer-rpc
 ```
 
 See [Configuration](#configuration) for more details on the configuration file and environment variables.
 
 ### Development Setup
 
-This project depends on `@editor-extensions/agentic` and `@editor-extensions/shared` as packages. They are vendored in as local deps and need to be built prior to building this project. The `npm run pre-build` command builds these deps off of `main` branch of [editor-extensions](https://github.com/konveyor/editor-extensions). This is triggered in `npm run build` command as well. You can set `PATH_EDITOR_EXTENSIONS` in `.env` file to use a local editor extensions repo instead.
+This project depends on `@editor-extensions/agentic` and `@editor-extensions/shared` as packages. They are vendored in as local deps and need to be built prior to building this project. The `npm run pre-build` command builds these deps off of `main` branch of [editor-extensions](https://github.com/konveyor/editor-extensions). You can set `PATH_EDITOR_EXTENSIONS` in `.env` file to use a local editor extensions repo instead.
 
 To build the project:
 
 ```bash
+# Pull in editor-extensions deps
+npm run pre-build
+
+# Install all deps
+npm run install
+
 # Build the project
-# This will also pull in and build the editor-extensions packages needed
 npm run build
 ```
 

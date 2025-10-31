@@ -11,6 +11,20 @@
       "args": {
         "model": "gpt-4o",
         "temperature": 0.1
+      }
+    },
+    {
+      "provider": "ChatBedrock",
+      "args": {
+        "model": "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+        "temperature": 0
+      }
+    },
+    {
+      "provider": "ChatBedrock",
+      "args": {
+        "model": "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+        "temperature": 0
       },
       "useForEvaluation": true
     }
@@ -19,5 +33,5 @@
   "jdtlsBundles": ["/jdtls/java-analyzer-bundle/java-analyzer-bundle.core/target/java-analyzer-bundle.core-1.0.0-SNAPSHOT.jar"],
   "jvmMaxMem": "4g",
   "kaiAnalyzerRpcPath": "/analyzer/kai_analyzer_rpc",
-  "rulesPath": ["/rules"]
+  "rulesPaths": ["/rules/default/generated"]
 }

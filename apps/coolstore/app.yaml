@@ -1,12 +1,11 @@
 ---
 name: coolstore
-language: java
-source_code:
-  git:
-    url: https://github.com/pranavgaikwad/coolstore
-    branch: exp/testCases
+sourceCode:
+  type: git
+  url: https://github.com/pranavgaikwad/coolstore
+  branch: exp/testCases
 targets:
   - quarkus
   - jakarta-ee
   - cloud-readiness
-
+programmingLanguage: java

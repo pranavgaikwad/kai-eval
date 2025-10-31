@@ -1,12 +1,12 @@
 ---
 name: springframework-demo
-language: java
-source_code:
-  git:
-    url: https://github.com/pranavgaikwad/migtools-getting-started
-    branch: eval
-    path: spring-framework-migration
+sourceCode:
+  type: git
+  url: https://github.com/pranavgaikwad/migtools-getting-started
+  branch: eval
+  path: spring-framework-migration
 targets:
   - spring6
   - cloud-readiness
+programmingLanguage: Java
 

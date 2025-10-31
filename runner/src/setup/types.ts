@@ -2,10 +2,11 @@ import { type Logger } from "winston";
 
 import {
   type EvaluationRunner,
-  type GetTaskManagerAndKaiRunnerFunction,
+  type GetTaskManagerFunction,
+  type KaiRunnerFunction,
 } from "../eval";
 import type {
-  AgentTasksProviderFunction,
+  TasksInteractionResolver as TasksUserInteractionFunction,
   KaiWorkflowManager,
   SupportedModelProviders,
 } from "../kai";
@@ -31,9 +32,9 @@ export interface KaiWorkflowSetupConfig {
   solutionServerUrl?: string;
   logDir: string;
   /*
-   * function to filter tasks for user interaction
+   * a function that sends tasks to the kai workflow when it requests diagnostics
    */
-  filterTasksFunc?: AgentTasksProviderFunction;
+  tasksUserInteractionFunction?: TasksUserInteractionFunction;
 }
 // Result of setting up a Kai workflow for fix generation
 export interface KaiWorkflowSetupResult {
@@ -88,8 +89,9 @@ export interface KaiEvalSetupConfig {
   readonly config: KaiRunnerConfig;
   readonly storeSnapshots?: boolean;
   readonly artifactsPath?: string;
-  readonly agentTasksProviderFunc?: AgentTasksProviderFunction;
-  readonly taskManagerAndKaiRunnerFunc?: GetTaskManagerAndKaiRunnerFunction;
+  readonly agentTasksProviderFunc?: TasksUserInteractionFunction;
+  readonly taskManagerAndKaiRunnerFunc?: GetTaskManagerFunction;
+  readonly kaiRunnerFunc?: KaiRunnerFunction;
 }
 
 export interface KaiEvalSetupResult {

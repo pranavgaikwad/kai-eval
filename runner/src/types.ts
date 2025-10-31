@@ -35,4 +35,6 @@ export interface KaiRunnerConfig {
 
   // Kai Workflow
   solutionServerUrl?: string;
+  // Optional workflow execution timeout in milliseconds
+  workflowTimeoutMs?: number;
 }
