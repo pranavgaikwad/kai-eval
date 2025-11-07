@@ -129,18 +129,15 @@ export interface AgentResult {
   error?: string;
 }
 
-export type GetTaskManagerFunction = (
-  logger: Logger,
-  config: KaiRunnerConfig,
-) => Promise<{
-  taskManager: TaskManager;
-  shutdownFunc: () => Promise<void>;
-}>;
-
+/**
+ * Evaluation runner uses this function to run Kai workflow for a test case.
+ * This is so that we can swap between IDE or standalone runner for evaluation.
+ */
 export type KaiRunnerFunction = (
   logger: Logger,
   tc: TestCase,
   application: TestApplication,
   variant: TestCaseVariant,
   config: KaiRunnerConfig,
+  taskManager: TaskManager,
 ) => Promise<void>;

@@ -4,7 +4,7 @@ import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { type AgentInput, type AgentResult } from "./types";
 
 /**
- * Runs the completeness evaluation agent
+ * Runs the completeness evaluation agent.
  */
 export async function runCompletenessAgent(
   input: AgentInput,
@@ -29,6 +29,7 @@ Your job is to compare implementation (actual code) against intent (developer no
 ## Evaluation Rules
 
 - Stick strictly to the notes when comparing. They are the authoritative reference.
+- Allow for minor implementation deviations (e.g., variable, function, or property name changes) — focus on verifying that the intended logic, data flow, and behavior are correctly and consistently implemented, even if naming or structure differ.
 - Do not assume additional requirements, behaviors, or conventions.
 - Use tools thoughtfully. Only gather information necessary to confirm alignment between the notes and the actual code changes.
 - Be specific. When identifying missing or incomplete work, clearly describe what evidence led you to that conclusion.
@@ -149,6 +150,7 @@ ${testCase.migrationHint}`,
       messageModifier: COMPLETENESS_PROMPTS.system,
     });
 
+    logger.debug("Running completeness agent");
     const response = await agent.invoke(
       {
         messages: [
@@ -357,6 +359,7 @@ ${testCase.testSelectors?.join(", ") || "Not available"}`,
       messageModifier: FUNCTIONAL_CORRECTNESS_PROMPTS.system,
     });
 
+    logger.debug("Running functional parity agent");
     const response = await agent.invoke(
       {
         messages: [
@@ -516,6 +519,7 @@ ${testCase.migrationHint}`,
       messageModifier: RESIDUAL_EFFORT_PROMPTS.system,
     });
 
+    logger.debug("Running residual effort agent");
     const response = await agent.invoke(
       {
         messages: [
@@ -577,7 +581,64 @@ ${testCase.migrationHint}`,
 }
 
 /**
- * Runs all three evaluation agents in parallel
+ * Retry wrapper for agent functions with up to 3 attempts
+ */
+async function retryAgent(
+  agentName: string,
+  agentFunction: (input: AgentInput) => Promise<AgentResult>,
+  input: AgentInput,
+  maxAttempts: number = 2,
+): Promise<AgentResult> {
+  const { logger } = input;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const result = await agentFunction(input);
+      if (attempt > 1) {
+        logger.info(`${agentName} agent succeeded on attempt ${attempt}`);
+      }
+      return result;
+    } catch (error) {
+      lastError = error;
+      logger.warn(
+        `${agentName} agent failed on attempt ${attempt}/${maxAttempts}`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          attempt,
+        },
+      );
+
+      if (attempt === maxAttempts) {
+        logger.error(
+          `${agentName} agent failed after ${maxAttempts} attempts`,
+          {
+            error,
+          },
+        );
+        break;
+      }
+
+      // Add a small delay before retry (exponential backoff)
+      const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+      logger.info(`Retrying ${agentName} agent in ${delayMs}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  // All attempts failed, return error result
+  return {
+    metric: {
+      reasoning: "",
+      score: 0,
+    },
+    responses: [],
+    error: `${agentName} agent failed after ${maxAttempts} attempts: ${lastError}`,
+  };
+}
+
+/**
+ * Runs all three evaluation agents in parallel with retry logic (up to 3 attempts each)
  */
 export async function runEvaluation(input: AgentInput): Promise<{
   completeness: AgentResult;
@@ -585,51 +646,37 @@ export async function runEvaluation(input: AgentInput): Promise<{
   residualEffort: AgentResult;
 }> {
   const results = await Promise.allSettled([
-    runCompletenessAgent(input),
-    runFunctionalParityAgent(input),
-    runResidualEffortAgent(input),
+    retryAgent("Completeness", runCompletenessAgent, input),
+    retryAgent("Functional Parity", runFunctionalParityAgent, input),
+    retryAgent("Residual Effort", runResidualEffortAgent, input),
   ]);
 
-  let completenessResult: AgentResult;
-  let functionalParityResult: AgentResult;
-  let residualEffortResult: AgentResult;
+  const completenessResult: AgentResult =
+    results[0].status === "fulfilled"
+      ? results[0].value
+      : {
+          metric: { reasoning: "", score: 0 },
+          responses: [],
+          error: `Completeness agent wrapper failed: ${results[0].reason}`,
+        };
 
-  if (results[0].status === "rejected") {
-    completenessResult = {
-      metric: {
-        reasoning: "",
-        score: 0,
-      },
-      responses: [],
-      error: `Completeness agent failed: ${results[0].reason}`,
-    };
-  } else {
-    completenessResult = results[0].value;
-  }
-  if (results[1].status === "rejected") {
-    functionalParityResult = {
-      metric: {
-        reasoning: "",
-        score: 0,
-      },
-      responses: [],
-      error: `Functional parity agent failed: ${results[1].reason}`,
-    };
-  } else {
-    functionalParityResult = results[1].value;
-  }
-  if (results[2].status === "rejected") {
-    residualEffortResult = {
-      metric: {
-        reasoning: "",
-        score: 0,
-      },
-      responses: [],
-      error: `Residual effort agent failed: ${results[2].reason}`,
-    };
-  } else {
-    residualEffortResult = results[2].value;
-  }
+  const functionalParityResult: AgentResult =
+    results[1].status === "fulfilled"
+      ? results[1].value
+      : {
+          metric: { reasoning: "", score: 0 },
+          responses: [],
+          error: `Functional parity agent wrapper failed: ${results[1].reason}`,
+        };
+
+  const residualEffortResult: AgentResult =
+    results[2].status === "fulfilled"
+      ? results[2].value
+      : {
+          metric: { reasoning: "", score: 0 },
+          responses: [],
+          error: `Residual effort agent wrapper failed: ${results[2].reason}`,
+        };
 
   return {
     completeness: completenessResult,

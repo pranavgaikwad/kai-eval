@@ -1,162 +1,213 @@
 import os from "os";
 import path from "path";
 
+import { type Logger } from "winston";
 
 import {
   AnalysisTasksProvider,
   JavaDiagnosticsTasksProvider,
-  type JavaDiagnosticsInitResult,
   type TaskProvider,
 } from "../taskProviders";
-import {
-  type TaskProviderSetupConfig,
-  type TaskProviderSetupResult,
-} from "./types";
-import { type FileWatchCapable, SharedFileWatcher } from "../utils/fsWatch";
+import { type KaiRunnerConfig } from "../types";
+import { isFileWatchCapable, SharedFileWatcher } from "../utils/fsWatch";
 import { createOrderedLogger } from "../utils/logger";
 import { getExcludedPaths } from "../utils/paths";
 
-export async function setupProviders(
-  config: TaskProviderSetupConfig,
-): Promise<TaskProviderSetupResult> {
-  if (!config.workspacePaths || config.workspacePaths.length === 0) {
-    throw new Error("basePaths must be provided and non-empty");
+interface ProviderSetupOptions {
+  config: KaiRunnerConfig;
+  programmingLanguage: string;
+  logger?: Logger;
+}
+
+const supportedProgrammingLanguages: string[] = ["java"];
+
+export async function setupProviders(opts: ProviderSetupOptions): Promise<{
+  providers: TaskProvider[];
+  shutdownFunc: () => Promise<void>;
+}> {
+  const { config } = opts;
+  const programmingLanguage = opts.programmingLanguage.toLowerCase();
+
+  if (
+    !supportedProgrammingLanguages.includes(programmingLanguage.toLowerCase())
+  ) {
+    throw new Error(
+      `Unsupported programming language: ${programmingLanguage.toLowerCase()}`,
+    );
   }
-  const logger = config.logger
-    ? config.logger.child({ module: "ProvidersSetup" })
+
+  if (!config.workspacePaths || !config.workspacePaths.length) {
+    throw new Error("workspacePaths must be provided");
+  }
+
+  const logDir =
+    config.logDir ||
+    path.join(os.tmpdir(), `setup-providers-logs-${Date.now()}`);
+  config.logDir = logDir;
+
+  const logger = opts.logger
+    ? opts.logger.child({ module: "ProvidersSetup" })
     : createOrderedLogger(
-        "info",
-        "debug",
-        path.join(os.tmpdir(), "providers.log"),
+        config.logLevel?.console || "info",
+        config.logLevel?.file || "debug",
+        path.join(logDir, "providers.log"),
       );
 
   const fileWatcher = SharedFileWatcher.getInstance(
     logger,
     config.workspacePaths,
   );
-  const providers: TaskProvider[] = [];
-  const providerMap: {
-    diagnostics?: JavaDiagnosticsTasksProvider;
-    analysis?: AnalysisTasksProvider;
-  } = {};
 
   logger.info("Setting up task management");
 
-  try {
-    let diagResult: JavaDiagnosticsInitResult | undefined;
-
-    if (config.diagnosticsParams) {
-      logger.info("Initializing DiagnosticsProvider");
-
-      const diagProvider = new JavaDiagnosticsTasksProvider(logger);
-      diagResult = await diagProvider.init({
-        ...config.diagnosticsParams,
-        workspacePaths: config.workspacePaths,
-      });
-
-      providers.push(diagProvider);
-      providerMap.diagnostics = diagProvider;
-
-      if (
-        "onFileChange" in diagProvider &&
-        typeof diagProvider.onFileChange === "function"
-      ) {
-        fileWatcher.registerProvider(diagProvider as FileWatchCapable);
-      }
-
-      logger.info("DiagnosticsProvider initialized", {
-        pipeName: diagResult.pipeName,
-      });
+  const providers: TaskProvider[] = [];
+  const shutdownFuncs: (() => Promise<void>)[] = [];
+  switch (programmingLanguage) {
+    case "java": {
+      const javaProviders = await setupJavaProviders(logger, config);
+      providers.push(...javaProviders.providers);
+      shutdownFuncs.push(javaProviders.shutdownFunc);
+      break;
     }
+  }
 
-    if (config.analysisParams) {
-      if (!diagResult?.pipeName) {
-        throw new Error(
-          "AnalysisProvider requires DiagnosticsProvider to be configured and initialized first",
-        );
-      }
-
-      logger.info("Processing ignore files for analysis exclusions");
-      const excludedPaths = await getExcludedPaths(
-        logger,
-        config.workspacePaths,
-      );
-
-      logger.info("Initializing AnalysisProvider");
-
-      const analysisProvider = new AnalysisTasksProvider(logger);
-      await analysisProvider.init({
-        ...config.analysisParams,
-        workspacePaths: config.workspacePaths,
-        pipePath: diagResult.pipeName,
-        excludedPaths,
-      });
-
-      providers.push(analysisProvider);
-      providerMap.analysis = analysisProvider;
-
-      // Register with file watcher if it supports file watching
-      if (
-        "onFileChange" in analysisProvider &&
-        typeof analysisProvider.onFileChange === "function"
-      ) {
-        fileWatcher.registerProvider(analysisProvider as FileWatchCapable);
-      }
-
-      logger.info("AnalysisProvider initialized");
+  providers.forEach((provider) => {
+    if (isFileWatchCapable(provider)) {
+      fileWatcher.registerProvider(provider);
     }
+  });
 
-    logger.info("Starting file watcher", {
-      paths: config.workspacePaths,
-    });
-    await fileWatcher.start();
+  logger.info("Starting file watcher", {
+    paths: config.workspacePaths,
+  });
+  await fileWatcher.start();
 
-    const shutdown = async (): Promise<void> => {
-      logger.info("Shutting down task management");
-
-      try {
-        await fileWatcher.stop();
-        logger.info("File watcher stopped");
-
-        const reversedProviders = [...providers].reverse();
-        await Promise.all(
-          reversedProviders.map(async (provider, index) => {
-            try {
-              await provider.stop();
-              logger.info("Provider stopped", {
-                providerIndex: reversedProviders.length - index,
-              });
-            } catch (error) {
-              logger.error("Error stopping provider", { error });
-            }
-          }),
-        );
-
-        logger.info("All providers stopped");
-      } catch (error) {
-        logger.error("Error during shutdown", { error });
-        throw error;
-      }
-    };
-
-    logger.info("Task management setup complete", {
-      providerCount: providers.length,
-    });
-
-    return {
-      providers: providerMap,
-      shutdown,
-    };
-  } catch (error) {
-    // Cleanup on error
-    logger.error("Error during setup, cleaning up", { error });
-
+  const shutdownFunc = async (): Promise<void> => {
+    logger.info("Shutting down task providers");
     try {
       await fileWatcher.stop();
-      await Promise.all(providers.map((p) => p.stop()));
-    } catch (cleanupError) {
-      logger.error("Error during cleanup", { cleanupError });
+      logger.info("File watcher stopped");
+
+      shutdownFuncs.forEach(async (shutdownFunc) => {
+        await shutdownFunc();
+      });
+
+      logger.info("All providers stopped");
+    } catch (error) {
+      logger.error("Error during shutdown", { error });
+      throw error;
+    }
+  };
+
+  logger.info("Task providers setup complete", {
+    providerCount: providers.length,
+  });
+
+  return {
+    providers,
+    shutdownFunc,
+  };
+}
+
+async function setupJavaProviders(
+  logger: Logger,
+  config: KaiRunnerConfig,
+): Promise<{
+  providers: TaskProvider[];
+  shutdownFunc: () => Promise<void>;
+}> {
+  if (!config.workspacePaths || config.workspacePaths.length === 0) {
+    throw new Error("workspacePaths must be provided and non-empty");
+  }
+  if (!config.jdtlsBinaryPath) {
+    throw new Error("jdtlsBinaryPath must be provided");
+  }
+  if (!config.jdtlsBundles) {
+    throw new Error("jdtlsBundles must be provided");
+  }
+  if (!config.jvmMaxMem) {
+    throw new Error("jvmMaxMem must be provided");
+  }
+  if (!config.kaiAnalyzerRpcPath) {
+    throw new Error("kaiAnalyzerRpcPath must be provided");
+  }
+  if (!config.rulesPaths) {
+    throw new Error("rulesPaths must be provided");
+  }
+  if (!config.targets) {
+    throw new Error("targets must be provided");
+  }
+  if (!config.sources) {
+    throw new Error("sources must be provided");
+  }
+  // We share the pipe between analysis and java diagnostics providers
+  let pipeName: string | undefined;
+  let diagnosticsProvider: JavaDiagnosticsTasksProvider | undefined;
+  try {
+    diagnosticsProvider = new JavaDiagnosticsTasksProvider(logger);
+    logger.info("Initializing JavaDiagnosticsProvider");
+    const diagnosticsResult = await diagnosticsProvider.init({
+      jdtlsBinaryPath: config.jdtlsBinaryPath,
+      jdtlsBundles: config.jdtlsBundles,
+      jvmMaxMem: config.jvmMaxMem,
+      logDir: config.logDir,
+      workspacePaths: config.workspacePaths,
+    });
+    logger.info("DiagnosticsProvider initialized", {
+      pipeName: diagnosticsResult.pipeName,
+    });
+    pipeName = diagnosticsResult.pipeName;
+  } catch (error) {
+    logger.error("Error initializing JavaDiagnosticsProvider", { error });
+    if (diagnosticsProvider) {
+      await diagnosticsProvider.stop();
     }
     throw error;
   }
+
+  if (!pipeName) {
+    throw new Error("JavaDiagnosticsProvider did not return a pipe name");
+  }
+
+  logger.info("Processing ignore files for analysis exclusions");
+  const excludedPaths = await getExcludedPaths(logger, config.workspacePaths);
+
+  let analysisProvider: AnalysisTasksProvider | undefined;
+  try {
+    analysisProvider = new AnalysisTasksProvider(logger);
+    logger.info("Initializing AnalysisProvider");
+
+    await analysisProvider.init({
+      workspacePaths: config.workspacePaths,
+      analyzerBinaryPath: config.kaiAnalyzerRpcPath,
+      rulesPaths: config.rulesPaths,
+      targets: config.targets,
+      sources: config.sources,
+      pipePath: pipeName,
+      excludedPaths,
+      logDir: config.logDir || "",
+    });
+    logger.info("AnalysisProvider initialized");
+  } catch (error) {
+    logger.error("Error initializing AnalysisProvider", { error });
+    if (analysisProvider) {
+      await analysisProvider.stop();
+    }
+    if (diagnosticsProvider) {
+      await diagnosticsProvider.stop();
+    }
+    throw error;
+  }
+
+  return {
+    providers: [diagnosticsProvider, analysisProvider],
+    shutdownFunc: async () => {
+      if (analysisProvider) {
+        await analysisProvider.stop();
+      }
+      if (diagnosticsProvider) {
+        await diagnosticsProvider.stop();
+      }
+    },
+  };
 }

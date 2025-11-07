@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { promises as fs } from "fs";
+import * as os from "os";
 import * as path from "path";
 
 import { program } from "commander";
@@ -12,6 +13,7 @@ import { setupKaiEval } from "./setup/kaiEval";
 import type { KaiRunnerConfig } from "./types";
 import { loadConfig, loadEnv } from "./utils/config";
 import { generateHtmlReport } from "./utils/htmlReportGenerator";
+import { createOrderedLogger } from "./utils/logger";
 
 async function kaiRunnerCommand(options: {
   config: string;
@@ -54,17 +56,34 @@ async function kaiRunnerCommand(options: {
 
     const finalConfig = mergeConfig(jsonConfig, cliConfig);
 
+    const logDir =
+      finalConfig.logDir ||
+      path.join(os.tmpdir(), `kai-runner-logs-${Date.now()}`);
+    finalConfig.logDir = logDir;
+    const logLevel = finalConfig.logLevel || { console: "info", file: "debug" };
+    finalConfig.logLevel = logLevel;
+    const logger = createOrderedLogger(
+      logLevel.console,
+      logLevel.file,
+      path.join(logDir, "kai-runner.log"),
+    );
+
     // Setup Kai runner with merged configuration
-    const kaiRunnerSetup = await setupKaiRunner(finalConfig, env);
-    const { logger, shutdown: kaiShutdown } = kaiRunnerSetup;
+    const kaiRunnerSetup = await setupKaiRunner({
+      config: finalConfig,
+      env,
+      programmingLanguage: "java",
+      logger,
+    });
+    const { shutdownFunc, runFunc: _runFunc } = kaiRunnerSetup;
 
     // Setup graceful shutdown
     const shutdown = async () => {
       try {
-        await kaiShutdown();
+        await shutdownFunc();
         process.exit(0);
-      } catch (error) {
-        logger.error("Error during shutdown", { error });
+      } catch (_error) {
+        // logger.error("Error during shutdown", { error });
         process.exit(1);
       }
     };
@@ -73,7 +92,7 @@ async function kaiRunnerCommand(options: {
     process.on("SIGTERM", shutdown);
 
     // Keep the process alive
-    logger.info("Kai runner is ready. Press Ctrl+C to stop.");
+    // logger.info("Kai runner is ready. Press Ctrl+C to stop.");
   } catch (error) {
     console.error("Error starting Kai runner:", error);
     process.exit(1);
@@ -87,6 +106,18 @@ async function kaiEvalCommand(options: {
   testSelectors: string;
   testPaths: string;
 }): Promise<void> {
+  // suppress console.* methods from imported modules
+  // to reduce noise in the eval output
+  const consoleLog = console.log;
+  const consoleWarn = console.warn;
+  const consoleError = console.error;
+  console.log = () => {};
+  console.warn = () => {};
+  console.error = () => {};
+  console.info = () => {};
+  console.debug = () => {};
+  console.trace = () => {};
+
   try {
     const jsonConfig = await loadConfig({ configPath: options.config });
     loadEnv();
@@ -96,28 +127,26 @@ async function kaiEvalCommand(options: {
       artifactsPath: options.artifactsPath || jsonConfig.logDir,
     });
 
-    console.log("Starting Kai evaluation...");
+    consoleLog("Starting Kai evaluation...");
 
     // Parse test cases from provided paths
     let testCases: TestCase[] = [];
     const testPaths = options.testPaths.split(",").map((path) => path.trim());
 
     for (const testPath of testPaths) {
-      console.log(`Parsing test cases from: ${testPath}`);
+      consoleLog(`Parsing test cases from: ${testPath}`);
       try {
         const parsedTestCases = await parseTestCasesFromDirectory(testPath);
         testCases.push(...parsedTestCases);
-        console.log(
-          `Found ${parsedTestCases.length} test cases in ${testPath}`,
-        );
+        consoleLog(`Found ${parsedTestCases.length} test cases in ${testPath}`);
       } catch (error) {
-        console.error(`Error parsing test cases from ${testPath}:`, error);
+        consoleError(`Error parsing test cases from ${testPath}:`, error);
         process.exit(1);
       }
     }
 
     if (testCases.length === 0) {
-      console.warn("No test cases found to evaluate");
+      consoleWarn("No test cases found to evaluate");
       return;
     }
 
@@ -126,7 +155,7 @@ async function kaiEvalCommand(options: {
       const selectors = options.testSelectors
         .split(",")
         .map((selector) => selector.trim());
-      console.log(
+      consoleLog(
         `Filtering test cases with selectors: ${selectors.join(", ")}`,
       );
 
@@ -148,10 +177,10 @@ async function kaiEvalCommand(options: {
       });
 
       testCases = filteredTestCases;
-      console.log(`Filtered to ${testCases.length} test cases`);
+      consoleLog(`Filtered to ${testCases.length} test cases`);
     }
 
-    console.log(`Total test cases to evaluate: ${testCases.length}`);
+    consoleLog(`Total test cases to evaluate: ${testCases.length}`);
 
     // suppress console.log of runner, only keep logger
     const results = await evaluationRunner.run(testCases, {
@@ -167,29 +196,27 @@ async function kaiEvalCommand(options: {
       ],
     });
 
-    console.log(
-      `Evaluation completed. Processed ${results.length} test cases.`,
-    );
+    consoleLog(`Evaluation completed. Processed ${results.length} test cases.`);
 
     for (const result of results) {
-      console.log(`\nTest Case: ${result.testCase.name}`);
-      console.log(`  Results: ${result.results.length}`);
-      console.log(`  Errors: ${result.errors.length}`);
+      consoleLog(`\nTest Case: ${result.testCase.name}`);
+      consoleLog(`  Results: ${result.results.length}`);
+      consoleLog(`  Errors: ${result.errors.length}`);
 
       for (const experiment of result.results) {
-        console.log(`  Variant: ${experiment.name}`);
-        console.log(`  Model: ${experiment.model}`);
-        console.log(
+        consoleLog(`  Variant: ${experiment.name}`);
+        consoleLog(`  Model: ${experiment.model}`);
+        consoleLog(
           `    Completeness: ${experiment.completeness.score.toFixed(3)}`,
         );
-        console.log(
+        consoleLog(
           `    Functional Parity: ${experiment.functionalParity.score.toFixed(3)}`,
         );
-        console.log(
+        consoleLog(
           `    Residual Effort: ${experiment.residualEffort.score.toFixed(3)}`,
         );
         if (experiment.error) {
-          console.log(`    Error: ${experiment.error}`);
+          consoleLog(`    Error: ${experiment.error}`);
         }
       }
     }
@@ -215,6 +242,7 @@ async function kaiEvalCommand(options: {
               programmingLanguage:
                 result.testCase.application.programmingLanguage,
             },
+            notes: result.testCase.notes,
           },
           experiments: result.results.map((exp) => ({
             variant: exp.name,
@@ -246,15 +274,15 @@ async function kaiEvalCommand(options: {
       // Write JSON results
       const jsonOutputPath = path.join(options.outputDir, "results.json");
       await fs.writeFile(jsonOutputPath, JSON.stringify(jsonOutput, null, 2));
-      console.log(`\nJSON results written to: ${jsonOutputPath}`);
+      consoleLog(`\nJSON results written to: ${jsonOutputPath}`);
 
       // Generate HTML report
       const htmlOutputPath = path.join(options.outputDir, "results.html");
       await generateHtmlReport(jsonOutput, htmlOutputPath);
-      console.log(`HTML report generated: ${htmlOutputPath}`);
+      consoleLog(`HTML report generated: ${htmlOutputPath}`);
     }
   } catch (error) {
-    console.error("Error running Kai evaluation:", error);
+    consoleError("Error running Kai evaluation:", error);
     process.exit(1);
   }
 }

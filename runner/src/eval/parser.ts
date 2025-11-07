@@ -330,7 +330,7 @@ async function parseTestCase(
     testSelectors: testSelectors.length > 0 ? testSelectors : undefined,
     application: applications.get(appName) as TestApplication,
     notes,
-    timeoutMs: timeoutMs ?? 600000,
+    timeoutMs: timeoutMs ?? 600000, // default timeout of 10 minutes for all test cases
   };
 }
 

@@ -21,7 +21,6 @@ export interface KaiRunnerConfig {
     useForEvaluation?: boolean;
   }>;
 
-  // Evaluation
   // Java Diagnostics
   jdtlsBinaryPath?: string;
   jdtlsBundles?: string[];

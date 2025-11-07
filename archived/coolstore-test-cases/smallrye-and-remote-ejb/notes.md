@@ -133,8 +133,8 @@
 - Add annotations: `@Path("/api/shipping")`, `@ApplicationScoped`, `@Produces(MediaType.APPLICATION_JSON)`
 - Remove interface implementation: `implements ShippingServiceRemote` (line 13)
 - Modify method signatures:
-  - `calculateShipping(ShoppingCart sc)` → `@GET @Path("/calculate") calculateShipping(@QueryParam("cartTotal") double cartTotal)`
-  - `calculateShippingInsurance(ShoppingCart sc)` → `@GET @Path("/insurance") calculateShippingInsurance(@QueryParam("cartTotal") double cartTotal)`
+  - `calculateShipping(ShoppingCart sc)` → `@POST @Path("/calculateShipping") calculateShipping(ShoppingCart sc)`
+  - `calculateShippingInsurance(ShoppingCart sc)` → `@POST @Path("/calculateInsurance") calculateShippingInsurance(ShoppingCart sc)`
 - Update method implementations to use `cartTotal` parameter instead of `sc.getCartItemTotal()`
 
 **Citations**:
@@ -165,13 +165,13 @@ import jakarta.ws.rs.core.MediaType;
 @Produces(MediaType.APPLICATION_JSON)
 public interface ShippingServiceClient {
 
-    @GET
-    @Path("/calculate")
-    double calculateShipping(@QueryParam("cartTotal") double cartTotal);
+    @POST
+    @Path("/calculateShipping")
+    double calculateShipping(ShoppingCart sc);
 
-    @GET
-    @Path("/insurance")
-    double calculateShippingInsurance(@QueryParam("cartTotal") double cartTotal);
+    @POST
+    @Path("/calculateInsurance")
+    double calculateShippingInsurance(ShoppingCart sc);
 }
 ```
 

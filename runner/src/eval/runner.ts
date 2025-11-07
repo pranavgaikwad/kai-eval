@@ -18,11 +18,11 @@ import {
   type EvaluationToolOptions,
   type EvaluationRunOptions as RunEvaluationOptions,
   type TestCaseVariant,
+  type GetTaskManagerFunction,
   type KaiRunnerFunction,
 } from "./types";
 import { type SupportedModelProviders, createModel } from "../kai";
-import { setupProviders } from "../setup/providers";
-import { TaskManager } from "../taskManager";
+import { type TaskManager } from "../taskManager";
 import { AnalysisTask, DiagnosticTask, type Task } from "../taskProviders";
 import { type KaiRunnerConfig } from "../types";
 import { getAllFiles, getChangedFiles } from "../utils/paths";
@@ -49,13 +49,14 @@ export class DefaultEvaluationRunner implements EvaluationRunner {
 
   constructor(
     private readonly config: KaiRunnerConfig,
-    private readonly kaiRunner: KaiRunnerFunction,
+    private readonly getTaskManagerFunc: GetTaskManagerFunction,
+    private readonly kaiRunnerFunc: KaiRunnerFunction,
     private readonly logger: Logger,
     artifactsPath?: string,
   ) {
     this.artifactsPath =
       artifactsPath || path.join(os.tmpdir(), "eval-artifacts");
-    this.logger = logger.child({ module: "DefaultEvaluationRunner" });
+    this.logger = logger.child({ module: "OptimizedEvaluationRunner" });
   }
 
   async run(
@@ -169,9 +170,10 @@ export class DefaultEvaluationRunner implements EvaluationRunner {
     const testConfig = this.createTestConfig(workspacePath, group.application);
 
     // Setup task manager
-    const { taskManager, shutdownFunc } = await this.setupTaskManager(
+    const { taskManager, shutdownFunc } = await this.getTaskManagerFunc(
+      this.logger,
       testConfig,
-      group.application.programmingLanguage,
+      group.application,
     );
 
     this.logger.debug(`Application setup complete: ${group.application.name}`, {
@@ -211,7 +213,6 @@ export class DefaultEvaluationRunner implements EvaluationRunner {
             (model) => !model.useForEvaluation,
           )) {
             this.logger.info("Running test case", {
-              application: group.application.name,
               testCase: testCase.name,
               variant: variant.name,
               model: `${modelConfig.provider}/${modelConfig.args.model || modelConfig.args.modelName || modelConfig.args.modelId || "<omitted>"}`,
@@ -284,7 +285,7 @@ export class DefaultEvaluationRunner implements EvaluationRunner {
     this.logger.debug("Running Kai workflow");
     let workflowError: Error | undefined = undefined;
     try {
-      await this.kaiRunner(
+      await this.kaiRunnerFunc(
         this.logger,
         testCase,
         testCase.application,
@@ -292,10 +293,7 @@ export class DefaultEvaluationRunner implements EvaluationRunner {
         {
           ...testConfig,
           models: [modelConfig],
-          targets: testCase.application.targets,
-          sources: testCase.application.sources,
         },
-        taskManager,
       );
     } catch (error) {
       this.logger.error("Failed to run Kai workflow", {
@@ -386,10 +384,6 @@ export class DefaultEvaluationRunner implements EvaluationRunner {
       issuesMatched: issues.split("\n").filter((line) => line.trim()).length,
     });
 
-    // Reset workspace to clean state before running evaluation
-    await this.resetWorkspace(workspacePath);
-
-    this.logger.debug("Running evaluation agents");
     // Run evaluation agents
     const agentResults = await runEvaluation({
       testCase,
@@ -513,10 +507,8 @@ export class DefaultEvaluationRunner implements EvaluationRunner {
     workspacePath: string,
     application: TestApplication,
   ): KaiRunnerConfig {
-    const baseConfig: KaiRunnerConfig = { ...this.config };
+    const baseConfig = { ...this.config };
     baseConfig.workspacePaths = [workspacePath];
-    baseConfig.sources = [];
-    baseConfig.targets = [];
     if (application.sources) {
       baseConfig.sources = application.sources;
     }
@@ -599,18 +591,5 @@ export class DefaultEvaluationRunner implements EvaluationRunner {
       this.logger.error("Failed to create evaluation model", { error });
       throw new Error(`Failed to create evaluation model: ${error}`);
     }
-  }
-
-  private async setupTaskManager(
-    config: KaiRunnerConfig,
-    programmingLanguage: string,
-  ): Promise<{ taskManager: TaskManager; shutdownFunc: () => Promise<void> }> {
-    const providersSetup = await setupProviders({
-      config,
-      programmingLanguage,
-      logger: this.logger,
-    });
-    const taskManager = new TaskManager(this.logger, providersSetup.providers);
-    return { taskManager, shutdownFunc: providersSetup.shutdownFunc };
   }
 }

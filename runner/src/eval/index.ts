@@ -1,3 +1,3 @@
 export * from "./types";
-export { OptimizedEvaluationRunner } from "./optimizedRunner";
+export { DefaultEvaluationRunner } from "./optimizedRunner";
 export { parseTestCasesFromDirectory } from "./parser";

@@ -47,6 +47,7 @@ export class TasksStoreManager<TData, TTask extends Task> {
 
   clearAllData(): void {
     this.dataMap.clear();
+    this.generationId = 0;
   }
 
   getDataCount(): number {

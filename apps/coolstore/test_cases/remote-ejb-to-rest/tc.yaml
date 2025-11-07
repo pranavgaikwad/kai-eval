@@ -1,17 +1,7 @@
 ---
 app: coolstore
-name: smallrye-and-remote-ejb
+name: remote-ejb-to-rest
 description: |
-  # First Issue: JMS to SmallRye
-  JMS is not supported in Quarkus.
-  References to JavaEE/JakartaEE JMS elements should be removed and replaced with their Quarkus SmallRye/Microprofile equivalents.
-
-  This issue was found in the following files:
-  - src/main/java/com/redhat/coolstore/service/InventoryNotificationMDB.java
-  - src/main/java/com/redhat/coolstore/service/OrderServiceMDB.java
-  - src/main/java/com/redhat/coolstore/service/ShoppingCartOrderProcessor.java
-
-  # Second Issue: Remote EJB to REST
   Remote EJBs are not supported in Quarkus, and therefore its use must be removed and replaced with REST functionality. In order to do this:
   1. Replace the `@Remote` annotation on the class with a `@jakarta.ws.rs.Path("<endpoint>")` annotation. An endpoint must be added to the annotation in place of `<endpoint>` to specify the actual path to the REST service.
   2. Remove `@Stateless` annotations if present. Given that REST services are stateless by nature, it makes it unnecessary.
@@ -28,12 +18,7 @@ description: |
   - src/main/java/com/redhat/coolstore/service/ShippingService.java
 rules:
   - ruleset: quarkus/springboot
-    rule: jms-to-reactive-quarkus-00050
-  - ruleset: quarkus/springboot
     rule: remote-ejb-to-quarkus-00000
 testSelectors:
-  - JMSComponentIntegrationTest
-  - JMSMigrationE2ETest
   - ShippingServiceMigrationE2ETest
 migrationHint: Java EE to Quarkus
-timeoutMs: 900000

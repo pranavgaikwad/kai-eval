@@ -34,6 +34,10 @@ coverage/
 .parcel-cache
 vendor/
 
+.env.local
+.config.container.local.json
+.config.local.json
+
 tests/test-data/**/target/
 tests/test-data/**/build/
 tests/test-data/**/bin/

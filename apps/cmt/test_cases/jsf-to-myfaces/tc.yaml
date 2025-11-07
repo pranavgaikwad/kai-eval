@@ -1,9 +1,8 @@
 ---
-name: jsf-and-smallrye
+name: jsf-to-myfaces
 app: cmt
 description: |
-  # First Issue: Replace JSF Dependency with MyFaces
-
+  Replace JSF Dependency with MyFaces
   JSF Dependencies with groupId `org.jboss.spec.javax.faces` should be replaced with 
 
   ```
@@ -26,21 +25,7 @@ description: |
     <version>4.2.0</version>
   </dependency>
   ```
-
-  # Second Issue: JMS is not supported in Quarkus
-  References to JavaEE/JakartaEE JMS elements should be removed and replaced with their Quarkus SmallRye/Microprofile equivalents.
-  
-  These issues were found in files:
-  - src/main/java/org/jboss/as/quickstarts/cmt/ejb/CustomerManagerEJB.java
-  - src/main/java/org/jboss/as/quickstarts/cmt/ejb/InvoiceManagerEJB.java
-  - src/main/java/org/jboss/as/quickstarts/cmt/ejb/LogMessageManagerEJB.java
-  - src/main/java/org/jboss/as/quickstarts/cmt/mdb/HelloWorldMDB.java
 rules:
 - rule: javaee-faces-to-quarkus-00000
   ruleset: quarkus/springboot
-- rule: jms-to-reactive-quarkus-00050
-  ruleset: quarkus/springboot
-testSelectors:
-  - JMSComponentIntegrationTest
 migrationHint: Java EE to Quarkus
-timeoutMs: 900000

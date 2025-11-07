@@ -15,6 +15,7 @@ interface ResultData {
   readonly testCase: {
     readonly name: string;
     readonly description: string;
+    readonly notes: string;
     readonly rules: Array<{
       readonly ruleset: string;
       readonly rule: string;
@@ -63,6 +64,7 @@ interface ApplicationData {
 interface TestCaseData {
   readonly name: string;
   readonly description: string;
+  readonly notes: string;
   readonly experiments: ExperimentData[];
   readonly errors: string[];
 }
@@ -89,6 +91,7 @@ function processData(jsonData: EvaluationResults): ProcessedData {
     app.testCases.set(testCaseName, {
       name: testCaseName,
       description: result.testCase.description,
+      notes: result.testCase.notes,
       experiments: result.experiments,
       errors: result.errors,
     });
@@ -259,6 +262,24 @@ export async function generateHtmlReport(
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
 
+        .summary-chart-section {
+            margin-top: 30px;
+        }
+
+        .summary-chart-container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-width: 1000px;
+            margin: 0 auto;
+            height: 400px;
+        }
+
+        .summary-chart-container canvas {
+            max-height: 350px !important;
+        }
+
         .summary-value {
             font-size: 2.5em;
             font-weight: bold;
@@ -409,6 +430,112 @@ export async function generateHtmlReport(
             word-wrap: break-word;
         }
 
+        .errors-section {
+            margin: 20px 0;
+        }
+
+        .errors-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .error-box {
+            background-color: #fff5f5;
+            border: 1px solid #fed7d7;
+            border-radius: 5px;
+            padding: 15px;
+        }
+
+        .error-title {
+            font-weight: 600;
+            color: #c53030;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .error-content {
+            background-color: white;
+            border: 1px solid #fed7d7;
+            border-radius: 4px;
+            padding: 10px;
+            font-size: 12px;
+            line-height: 1.4;
+            max-height: 150px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .error-list {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .error-list li {
+            margin-bottom: 5px;
+        }
+
+        .no-errors {
+            color: #38a169;
+            font-style: italic;
+        }
+
+        .tabs-container {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .tab-buttons {
+            display: flex;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #495057;
+            transition: all 0.3s ease;
+        }
+
+        .tab-button:hover {
+            background-color: #e9ecef;
+        }
+
+        .tab-button.active {
+            background-color: white;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            margin-bottom: -1px;
+        }
+
+        .tab-content {
+            padding: 20px;
+            background-color: white;
+        }
+
+        .tab-panel {
+            display: none;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .errors-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .diff-container {
             margin: 15px 0;
             border: 1px solid #ddd;
@@ -544,60 +671,15 @@ export async function generateHtmlReport(
                     <div class="summary-label">Errors</div>
                 </div>
             </div>
-        </div>
 
-        <!-- Raw Results Section -->
-        <button class="collapsible">🔍 Raw Results</button>
-        <div class="content">
-            <div class="diff-section">
-                <div class="diff-selector">
-                    <label>Select Test Case:</label>
-                    <select id="testCaseSelect" onchange="updateVariantSelect()">
-                        <option value="">Choose a test case...</option>
-                        ${Array.from(processedData.applications.values())
-                          .map((app) =>
-                            Array.from(app.testCases.values())
-                              .map(
-                                (tc) =>
-                                  `<option value="${app.name}|${tc.name}">${app.name} - ${tc.name}</option>`,
-                              )
-                              .join(""),
-                          )
-                          .join("")}
-                    </select>
-
-                    <label>Select Variant:</label>
-                    <select id="variantSelect" onchange="updateModelSelect()" disabled>
-                        <option value="">Choose a variant...</option>
-                    </select>
-
-                    <label>Select Model:</label>
-                    <select id="modelSelect" onchange="showDiff()" disabled>
-                        <option value="">Choose a model...</option>
-                    </select>
+            <div class="summary-chart-section">
+                <h3 style="color: #2c3e50; margin-bottom: 15px; text-align: center;">Average Performance by Model</h3>
+                <div class="summary-chart-container">
+                    <canvas id="summaryChart"></canvas>
                 </div>
-                <div id="reasoningContainer" class="reasoning-section" style="display: none;">
-                    <div class="reasoning-boxes">
-                        <div class="reasoning-box">
-                            <div class="reasoning-title">🎯 Completeness</div>
-                            <div id="completenessScore" class="reasoning-score"></div>
-                            <div id="completenessReasoning" class="reasoning-text"></div>
-                        </div>
-                        <div class="reasoning-box">
-                            <div class="reasoning-title">⚖️ Functional Parity</div>
-                            <div id="functionalParityScore" class="reasoning-score"></div>
-                            <div id="functionalParityReasoning" class="reasoning-text"></div>
-                        </div>
-                        <div class="reasoning-box">
-                            <div class="reasoning-title">🔧 Residual Effort</div>
-                            <div id="residualEffortScore" class="reasoning-score"></div>
-                            <div id="residualEffortReasoning" class="reasoning-text"></div>
-                        </div>
-                    </div>
-                </div>
-                <div id="diffContainer" class="diff-container" style="display: none;"></div>
             </div>
         </div>
+
 
         <!-- Applications Section -->
         ${Array.from(processedData.applications.values())
@@ -646,9 +728,82 @@ export async function generateHtmlReport(
                             : ""
                         }
 
-                        <div class="description markdown-content">
-                            <strong>Description:</strong>
-                            <div id="description-${app.name}-${testCase.name}" class="markdown-rendered"></div>
+                        <div class="tabs-container">
+                            <div class="tab-buttons">
+                                <button class="tab-button active" onclick="switchTab('${app.name}-${testCase.name}', 'description')">📋 Description</button>
+                                ${testCase.notes && testCase.notes.trim() ?
+                                  `<button class="tab-button" onclick="switchTab('${app.name}-${testCase.name}', 'notes')">📝 Notes</button>` :
+                                  ""
+                                }
+                                <button class="tab-button" onclick="switchTab('${app.name}-${testCase.name}', 'rawresults')">🔍 Raw Results</button>
+                            </div>
+                            <div class="tab-content">
+                                <div id="description-tab-${app.name}-${testCase.name}" class="tab-panel active">
+                                    <div class="description markdown-content">
+                                        <strong>Description:</strong>
+                                        <div id="description-${app.name}-${testCase.name}" class="markdown-rendered"></div>
+                                    </div>
+                                </div>
+                                ${testCase.notes && testCase.notes.trim() ?
+                                  `<div id="notes-tab-${app.name}-${testCase.name}" class="tab-panel">
+                                      <div class="description markdown-content">
+                                          <strong>Notes:</strong>
+                                          <div id="notes-${app.name}-${testCase.name}" class="markdown-rendered"></div>
+                                      </div>
+                                  </div>` :
+                                  ""
+                                }
+                                <div id="rawresults-tab-${app.name}-${testCase.name}" class="tab-panel">
+                                    <div class="diff-section">
+                                        <div class="diff-selector">
+                                            <label>Select Variant:</label>
+                                            <select id="variantSelect-${app.name}-${testCase.name}" onchange="updateModelSelectForTestCase('${app.name}', '${testCase.name}')" data-testcase="${app.name}|${testCase.name}">
+                                                <option value="">Choose a variant...</option>
+                                                ${Array.from(processedData.allVariants).map(variant =>
+                                                    `<option value="${variant}">${variant}</option>`
+                                                ).join('')}
+                                            </select>
+
+                                            <label>Select Model:</label>
+                                            <select id="modelSelect-${app.name}-${testCase.name}" onchange="showDiffForTestCase('${app.name}', '${testCase.name}')" disabled data-testcase="${app.name}|${testCase.name}">
+                                                <option value="">Choose a model...</option>
+                                            </select>
+                                        </div>
+                                        <div id="reasoningContainer-${app.name}-${testCase.name}" class="reasoning-section" style="display: none;">
+                                            <div class="reasoning-boxes">
+                                                <div class="reasoning-box">
+                                                    <div class="reasoning-title">🎯 Completeness</div>
+                                                    <div id="completenessScore-${app.name}-${testCase.name}" class="reasoning-score"></div>
+                                                    <div id="completenessReasoning-${app.name}-${testCase.name}" class="reasoning-text"></div>
+                                                </div>
+                                                <div class="reasoning-box">
+                                                    <div class="reasoning-title">⚖️ Functional Parity</div>
+                                                    <div id="functionalParityScore-${app.name}-${testCase.name}" class="reasoning-score"></div>
+                                                    <div id="functionalParityReasoning-${app.name}-${testCase.name}" class="reasoning-text"></div>
+                                                </div>
+                                                <div class="reasoning-box">
+                                                    <div class="reasoning-title">🔧 Residual Effort</div>
+                                                    <div id="residualEffortScore-${app.name}-${testCase.name}" class="reasoning-score"></div>
+                                                    <div id="residualEffortReasoning-${app.name}-${testCase.name}" class="reasoning-text"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div id="errorsContainer-${app.name}-${testCase.name}" class="errors-section" style="display: none;">
+                                            <div class="errors-container">
+                                                <div class="error-box">
+                                                    <div class="error-title">❌ Test Case Errors</div>
+                                                    <div id="testCaseErrors-${app.name}-${testCase.name}" class="error-content"></div>
+                                                </div>
+                                                <div class="error-box">
+                                                    <div class="error-title">⚠️ Experiment Error</div>
+                                                    <div id="experimentError-${app.name}-${testCase.name}" class="error-content"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div id="diffContainer-${app.name}-${testCase.name}" class="diff-container" style="display: none;"></div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `,
@@ -696,9 +851,9 @@ export async function generateHtmlReport(
 
         // Calculate weighted score
         function calculateWeightedScore(metrics) {
-            return 0.5 * metrics.completeness.score +
+            return (0.5 * metrics.completeness.score +
                    0.3 * metrics.functionalParity.score +
-                   0.2 * metrics.residualEffort.score;
+                   0.2 * metrics.residualEffort.score) * 10;
         }
 
         // Truncate label to specified length
@@ -762,9 +917,9 @@ export async function generateHtmlReport(
                     scales: {
                         y: {
                             beginAtZero: true,
-                            max: 1,
+                            max: 10,
                             ticks: {
-                                stepSize: 0.2,
+                                stepSize: 1,
                                 font: {
                                     size: 11
                                 }
@@ -935,10 +1090,11 @@ export async function generateHtmlReport(
             });
         }
 
-        // Render markdown descriptions
+        // Render markdown descriptions and notes
         function renderMarkdownDescriptions() {
             processedData.forEach(([appName, app]) => {
                 app.testCases.forEach(([testCaseName, testCase]) => {
+                    // Render description
                     const descriptionElement = document.getElementById(\`description-\${appName}-\${testCaseName}\`);
                     if (descriptionElement && testCase.description) {
                         try {
@@ -954,7 +1110,190 @@ export async function generateHtmlReport(
                             descriptionElement.innerHTML = testCase.description.replace(/\\n/g, '<br>');
                         }
                     }
+
+                    // Render notes if they exist
+                    const notesElement = document.getElementById(\`notes-\${appName}-\${testCaseName}\`);
+                    if (notesElement && testCase.notes && testCase.notes.trim()) {
+                        try {
+                            // Check if marked library is available
+                            if (typeof marked !== 'undefined') {
+                                notesElement.innerHTML = marked.parse(testCase.notes);
+                            } else {
+                                // Fallback: simple HTML with line breaks
+                                notesElement.innerHTML = testCase.notes.replace(/\\n/g, '<br>');
+                            }
+                        } catch (error) {
+                            // Fallback on error
+                            notesElement.innerHTML = testCase.notes.replace(/\\n/g, '<br>');
+                        }
+                    }
                 });
+            });
+        }
+
+        // Create summary chart showing average performance by model and variant
+        function createSummaryChart() {
+            const ctx = document.getElementById('summaryChart');
+            if (!ctx) return;
+
+            // Set fixed height for the canvas
+            ctx.style.height = '350px';
+            ctx.style.maxHeight = '350px';
+
+            // Calculate average weighted scores by model and variant across all experiments
+            const modelVariantAverages = {};
+
+            // Collect all experiments across all applications and test cases
+            evaluationData.results.forEach(result => {
+                result.experiments.forEach(experiment => {
+                    const model = experiment.model;
+                    const variant = experiment.variant;
+                    const weightedScore = calculateWeightedScore(experiment.metrics);
+
+                    if (!modelVariantAverages[model]) {
+                        modelVariantAverages[model] = {};
+                    }
+                    if (!modelVariantAverages[model][variant]) {
+                        modelVariantAverages[model][variant] = [];
+                    }
+
+                    modelVariantAverages[model][variant].push(weightedScore);
+                });
+            });
+
+            // Calculate averages
+            const averages = {};
+            const models = Object.keys(modelVariantAverages);
+            const variants = [...allVariants];
+
+            models.forEach(model => {
+                averages[model] = {};
+                variants.forEach(variant => {
+                    const scores = modelVariantAverages[model][variant];
+                    if (scores && scores.length > 0) {
+                        averages[model][variant] = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+                    } else {
+                        averages[model][variant] = null; // No data for this combination
+                    }
+                });
+            });
+
+            // Prepare chart data for grouped bar chart
+            const datasets = variants.map(variant => ({
+                label: variant,
+                data: models.map(model => averages[model][variant]),
+                backgroundColor: (variantColors[variant] || '#95a5a6') + 'CC',
+                borderColor: variantColors[variant] || '#95a5a6',
+                borderWidth: 1,
+                barPercentage: 0.8,
+                categoryPercentage: 0.9
+            }));
+
+            new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: models.map(model => truncateLabel(model)),
+                    datasets: datasets
+                },
+                options: {
+                    indexAxis: 'y', // Horizontal bars
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: {
+                        padding: {
+                            top: 20,
+                            bottom: 20,
+                            left: 15,
+                            right: 15
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            max: 10,
+                            ticks: {
+                                stepSize: 1,
+                                font: {
+                                    size: 11
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Average Score (0-10)',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            },
+                            grid: {
+                                display: true
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                font: {
+                                    size: 10
+                                },
+                                callback: function(value, index, ticks) {
+                                    return truncateLabel(this.getLabelForValue(value));
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Models',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            },
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                padding: 20,
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Average Performance Across All Test Cases',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            padding: {
+                                top: 10,
+                                bottom: 20
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: function(tooltipItems) {
+                                    const index = tooltipItems[0].dataIndex;
+                                    return models[index]; // Show full model name
+                                },
+                                label: function(context) {
+                                    const variant = context.dataset.label;
+                                    const score = context.parsed.x;
+                                    return score !== null ? \`\${variant}: \${score.toFixed(2)}\` : \`\${variant}: No data\`;
+                                }
+                            }
+                        }
+                    },
+                    elements: {
+                        bar: {
+                            borderWidth: 1
+                        }
+                    }
+                }
             });
         }
 
@@ -978,6 +1317,9 @@ export async function generateHtmlReport(
                     });
                 });
             });
+
+            // Create the summary chart
+            createSummaryChart();
         }
 
         // Collapsible functionality
@@ -999,61 +1341,55 @@ export async function generateHtmlReport(
             }, 100);
         });
 
-        // Diff viewer functionality
-        function updateVariantSelect() {
-            const testCaseSelect = document.getElementById('testCaseSelect');
-            const variantSelect = document.getElementById('variantSelect');
-            const modelSelect = document.getElementById('modelSelect');
-            const reasoningContainer = document.getElementById('reasoningContainer');
-            const diffContainer = document.getElementById('diffContainer');
+        // Tab switching functionality
+        function switchTab(testCaseId, tabName) {
+            const descriptionTab = document.getElementById(\`description-tab-\${testCaseId}\`);
+            const notesTab = document.getElementById(\`notes-tab-\${testCaseId}\`);
+            const rawResultsTab = document.getElementById(\`rawresults-tab-\${testCaseId}\`);
+            const descriptionButton = document.querySelector(\`[onclick="switchTab('\${testCaseId}', 'description')"]\`);
+            const notesButton = document.querySelector(\`[onclick="switchTab('\${testCaseId}', 'notes')"]\`);
+            const rawResultsButton = document.querySelector(\`[onclick="switchTab('\${testCaseId}', 'rawresults')"]\`);
 
-            variantSelect.innerHTML = '<option value="">Choose a variant...</option>';
-            modelSelect.innerHTML = '<option value="">Choose a model...</option>';
-            modelSelect.disabled = true;
-            reasoningContainer.style.display = 'none';
-            diffContainer.style.display = 'none';
+            // Hide all tabs
+            descriptionTab.classList.remove('active');
+            if (notesTab) notesTab.classList.remove('active');
+            rawResultsTab.classList.remove('active');
+            descriptionButton.classList.remove('active');
+            if (notesButton) notesButton.classList.remove('active');
+            rawResultsButton.classList.remove('active');
 
-            if (!testCaseSelect.value) {
-                variantSelect.disabled = true;
-                return;
-            }
-
-            const [appName, testCaseName] = testCaseSelect.value.split('|');
-            const result = evaluationData.results.find(r =>
-                r.testCase.application.name === appName && r.testCase.name === testCaseName
-            );
-
-            if (result) {
-                const variants = [...new Set(result.experiments.map(exp => exp.variant))];
-                variants.forEach(variant => {
-                    const option = document.createElement('option');
-                    option.value = variant;
-                    option.textContent = variant;
-                    variantSelect.appendChild(option);
-                });
-                variantSelect.disabled = false;
+            // Show selected tab
+            if (tabName === 'description') {
+                descriptionTab.classList.add('active');
+                descriptionButton.classList.add('active');
+            } else if (tabName === 'notes' && notesTab) {
+                notesTab.classList.add('active');
+                if (notesButton) notesButton.classList.add('active');
+            } else if (tabName === 'rawresults') {
+                rawResultsTab.classList.add('active');
+                rawResultsButton.classList.add('active');
             }
         }
 
-        function updateModelSelect() {
-            const testCaseSelect = document.getElementById('testCaseSelect');
-            const variantSelect = document.getElementById('variantSelect');
-            const modelSelect = document.getElementById('modelSelect');
-            const reasoningContainer = document.getElementById('reasoningContainer');
-            const diffContainer = document.getElementById('diffContainer');
+        // Per-test-case raw results functionality
+        function updateModelSelectForTestCase(appName, testCaseName) {
+            const variantSelect = document.getElementById(\`variantSelect-\${appName}-\${testCaseName}\`);
+            const modelSelect = document.getElementById(\`modelSelect-\${appName}-\${testCaseName}\`);
+            const reasoningContainer = document.getElementById(\`reasoningContainer-\${appName}-\${testCaseName}\`);
+            const errorsContainer = document.getElementById(\`errorsContainer-\${appName}-\${testCaseName}\`);
+            const diffContainer = document.getElementById(\`diffContainer-\${appName}-\${testCaseName}\`);
 
+            // Clear existing selections and hide containers
             modelSelect.innerHTML = '<option value="">Choose a model...</option>';
+            modelSelect.disabled = true;
             reasoningContainer.style.display = 'none';
+            errorsContainer.style.display = 'none';
             diffContainer.style.display = 'none';
 
-            if (!testCaseSelect.value || !variantSelect.value) {
-                modelSelect.disabled = true;
-                return;
-            }
-
-            const [appName, testCaseName] = testCaseSelect.value.split('|');
             const variant = variantSelect.value;
+            if (!variant) return;
 
+            // Find the test case data
             const result = evaluationData.results.find(r =>
                 r.testCase.application.name === appName && r.testCase.name === testCaseName
             );
@@ -1065,33 +1401,36 @@ export async function generateHtmlReport(
                     .map(exp => exp.model);
 
                 const uniqueModels = [...new Set(modelsForVariant)];
+
                 uniqueModels.forEach(model => {
                     const option = document.createElement('option');
                     option.value = model;
                     option.textContent = model;
                     modelSelect.appendChild(option);
                 });
+
                 modelSelect.disabled = false;
             }
         }
 
-        function showDiff() {
-            const testCaseSelect = document.getElementById('testCaseSelect');
-            const variantSelect = document.getElementById('variantSelect');
-            const modelSelect = document.getElementById('modelSelect');
-            const reasoningContainer = document.getElementById('reasoningContainer');
-            const diffContainer = document.getElementById('diffContainer');
+        function showDiffForTestCase(appName, testCaseName) {
+            const variantSelect = document.getElementById(\`variantSelect-\${appName}-\${testCaseName}\`);
+            const modelSelect = document.getElementById(\`modelSelect-\${appName}-\${testCaseName}\`);
+            const reasoningContainer = document.getElementById(\`reasoningContainer-\${appName}-\${testCaseName}\`);
+            const errorsContainer = document.getElementById(\`errorsContainer-\${appName}-\${testCaseName}\`);
+            const diffContainer = document.getElementById(\`diffContainer-\${appName}-\${testCaseName}\`);
 
-            if (!testCaseSelect.value || !variantSelect.value || !modelSelect.value) {
+            const variant = variantSelect.value;
+            const model = modelSelect.value;
+
+            if (!variant || !model) {
                 reasoningContainer.style.display = 'none';
+                errorsContainer.style.display = 'none';
                 diffContainer.style.display = 'none';
                 return;
             }
 
-            const [appName, testCaseName] = testCaseSelect.value.split('|');
-            const variant = variantSelect.value;
-            const model = modelSelect.value;
-
+            // Find the test case data
             const result = evaluationData.results.find(r =>
                 r.testCase.application.name === appName && r.testCase.name === testCaseName
             );
@@ -1103,28 +1442,49 @@ export async function generateHtmlReport(
                 );
 
                 if (experiment) {
-                    // Show reasoning information
-                    document.getElementById('completenessScore').textContent =
+                    // Show reasoning information with scoped IDs
+                    document.getElementById(\`completenessScore-\${appName}-\${testCaseName}\`).textContent =
                         \`Score: \${experiment.metrics.completeness.score.toFixed(3)}\`;
-                    document.getElementById('functionalParityScore').textContent =
+                    document.getElementById(\`functionalParityScore-\${appName}-\${testCaseName}\`).textContent =
                         \`Score: \${experiment.metrics.functionalParity.score.toFixed(3)}\`;
-                    document.getElementById('residualEffortScore').textContent =
+                    document.getElementById(\`residualEffortScore-\${appName}-\${testCaseName}\`).textContent =
                         \`Score: \${experiment.metrics.residualEffort.score.toFixed(3)}\`;
 
-                    document.getElementById('completenessReasoning').textContent =
+                    document.getElementById(\`completenessReasoning-\${appName}-\${testCaseName}\`).textContent =
                         experiment.metrics.completeness.reasoning || 'No reasoning provided';
-                    document.getElementById('functionalParityReasoning').textContent =
+                    document.getElementById(\`functionalParityReasoning-\${appName}-\${testCaseName}\`).textContent =
                         experiment.metrics.functionalParity.reasoning || 'No reasoning provided';
-                    document.getElementById('residualEffortReasoning').textContent =
+                    document.getElementById(\`residualEffortReasoning-\${appName}-\${testCaseName}\`).textContent =
                         experiment.metrics.residualEffort.reasoning || 'No reasoning provided';
 
                     reasoningContainer.style.display = 'block';
 
-                    // Show error if experiment failed
-                    if (experiment.error) {
-                        diffContainer.innerHTML = \`<div class="error">Experiment Error: \${experiment.error}</div>\`;
-                        diffContainer.style.display = 'block';
-                        return;
+                    // Show error information only if there are actual errors
+                    const hasTestCaseErrors = result.errors && result.errors.length > 0;
+                    const hasExperimentError = experiment.error;
+
+                    if (hasTestCaseErrors || hasExperimentError) {
+                        const testCaseErrorsElement = document.getElementById(\`testCaseErrors-\${appName}-\${testCaseName}\`);
+                        const experimentErrorElement = document.getElementById(\`experimentError-\${appName}-\${testCaseName}\`);
+
+                        // Display test case errors
+                        if (hasTestCaseErrors) {
+                            const errorsList = result.errors.map(error => \`<li>\${error}</li>\`).join('');
+                            testCaseErrorsElement.innerHTML = \`<ul class="error-list">\${errorsList}</ul>\`;
+                        } else {
+                            testCaseErrorsElement.innerHTML = '<span class="no-errors">No errors for this test case</span>';
+                        }
+
+                        // Display experiment error
+                        if (hasExperimentError) {
+                            experimentErrorElement.textContent = experiment.error;
+                        } else {
+                            experimentErrorElement.innerHTML = '<span class="no-errors">No error for this experiment</span>';
+                        }
+
+                        errorsContainer.style.display = 'block';
+                    } else {
+                        errorsContainer.style.display = 'none';
                     }
 
                     // Show diff if available
@@ -1158,11 +1518,13 @@ export async function generateHtmlReport(
                     }
                 } else {
                     reasoningContainer.style.display = 'none';
+                    errorsContainer.style.display = 'none';
                     diffContainer.innerHTML = \`<div class="error">Experiment data not found for variant "\${variant}" and model "\${model}"</div>\`;
                     diffContainer.style.display = 'block';
                 }
             } else {
                 reasoningContainer.style.display = 'none';
+                errorsContainer.style.display = 'none';
                 diffContainer.innerHTML = '<div class="error">Test case data not found</div>';
                 diffContainer.style.display = 'block';
             }

@@ -148,7 +148,7 @@ Configuration precedence: CLI arguments > JSON configuration file > environment 
 | `jvmMaxMem` | string | Maximum JVM memory allocation (e.g., "4g") |
 | `kaiAnalyzerRpcPath` | string | Path to Kai analyzer RPC binary (optional) |
 | `rulesPaths` | string[] | Migration rule files and directories |
-| `targets` | string[] | Migration target frameworks (quarkus3, etc.) |
+| `targets` | string[] | Migration target frameworks (quarkus, etc.) |
 | `sources` | string[] | Migration source frameworks (eap7, etc.) |
 | `solutionServerUrl` | string | Solution server endpoint URL |
 | `logLevel` | object | Console and file logging levels |

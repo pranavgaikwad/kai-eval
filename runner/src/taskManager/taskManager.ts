@@ -1,7 +1,3 @@
-import { promises as fs } from "fs";
-import * as os from "os";
-import * as path from "path";
-
 import { type Logger } from "winston";
 
 import type { TaskSnapshot } from "./types";
@@ -26,26 +22,24 @@ export class TaskManager {
   constructor(
     private readonly logger: Logger,
     provider?: TaskProvider[],
-    private readonly snapshotDir: string = "",
-    private readonly storeSnapshots: boolean = false,
   ) {
     if (provider) {
       this.providers = [...provider];
     }
     this.logger = logger.child({ module: "TaskManager" });
 
-    if (this.storeSnapshots) {
-      this.snapshotDir = path.join(snapshotDir || os.tmpdir(), "snapshots");
-      fs.mkdir(this.snapshotDir, { recursive: true })
-        .then(() => {
-          this.logger.info("Storing snapshots", {
-            snapshotDir: this.snapshotDir,
-          });
-        })
-        .catch((error) => {
-          throw new Error(`Failed to create snapshot directory: ${error}`);
-        });
-    }
+    // if (this.storeSnapshots) {
+    //   this.snapshotDir = path.join(snapshotDir || os.tmpdir(), "snapshots");
+    //   fs.mkdir(this.snapshotDir, { recursive: true })
+    //     .then(() => {
+    //       this.logger.info("Storing snapshots", {
+    //         snapshotDir: this.snapshotDir,
+    //       });
+    //     })
+    //     .catch((error) => {
+    //       throw new Error(`Failed to create snapshot directory: ${error}`);
+    //     });
+    // }
   }
 
   async getTasks(options?: GetTasksOptions): Promise<number> {
@@ -181,65 +175,30 @@ export class TaskManager {
       ),
     });
 
-    if (this.storeSnapshots) {
-      const tasks = Array.from(providerGenerationIDs.entries())
-        .flatMap(([providerName, generationId]) => {
-          const tasksForGen =
-            this.tasksStore.get(providerName)?.get(generationId) || [];
-          return tasksForGen.map((task) => task.toJSON());
-        })
-        .filter(Boolean);
-      await fs.writeFile(
-        path.join(this.snapshotDir, `${snapshotId}.json`),
-        JSON.stringify(
-          {
-            id: snapshot.id,
-            timestamp: snapshot.timestamp,
-            tasks,
-          },
-          null,
-          2,
-        ),
-      );
-    }
+    // if (this.storeSnapshots) {
+    //   const tasks = Array.from(providerGenerationIDs.entries())
+    //     .flatMap(([providerName, generationId]) => {
+    //       const tasksForGen =
+    //         this.tasksStore.get(providerName)?.get(generationId) || [];
+    //       return tasksForGen.map((task) => task.toJSON());
+    //     })
+    //     .filter(Boolean);
+    //   await fs.writeFile(
+    //     path.join(this.snapshotDir, `${snapshotId}.json`),
+    //     JSON.stringify(
+    //       {
+    //         id: snapshot.id,
+    //         timestamp: snapshot.timestamp,
+    //         tasks,
+    //       },
+    //       null,
+    //       2,
+    //     ),
+    //   );
+    // }
 
     this.snapshots.set(snapshotId, snapshot);
     return snapshotId;
-  }
-
-  getTaskFrequency(snapshotId: number, taskId: string): number {
-    if (!this.snapshots.has(snapshotId)) {
-      throw new Error("Snapshot not found");
-    }
-
-    const targetSnapshot = this.snapshots.get(snapshotId)!;
-    let count = 0;
-
-    // For each provider in the target snapshot, check all its revisions up to the generation in the snapshot
-    for (const [
-      providerName,
-      maxGenerationId,
-    ] of targetSnapshot.providerGenerationIDs) {
-      const providerTasks = this.tasksStore.get(providerName);
-      if (providerTasks) {
-        // Check all generations from 1 to maxGenerationId for this provider
-        for (
-          let generationId = 1;
-          generationId <= maxGenerationId;
-          generationId++
-        ) {
-          const tasks = providerTasks.get(generationId);
-          if (tasks) {
-            const hasTask = tasks.some((task) => task.getID() === taskId);
-            if (hasTask) {
-              count++;
-            }
-          }
-        }
-      }
-    }
-
-    return count;
   }
 
   public getLatestSnapshotId(): number {
@@ -254,6 +213,7 @@ export class TaskManager {
     this.snapshots.clear();
     this.tasksStore.clear();
     this.snapshotCounter = 0;
+    this.providers.forEach((provider) => provider.reset());
     this.logger.debug("TaskManager state reset");
   }
 

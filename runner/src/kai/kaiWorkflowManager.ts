@@ -29,10 +29,6 @@ import {
 export class KaiWorkflowManager {
   private readonly workflow: KaiInteractiveWorkflow;
   private isInitialized: boolean = false;
-  private readonly pendingInteractions: Map<
-    string,
-    (response: unknown) => void
-  > = new Map();
   private workspaceDir: string = "";
 
   // stream buffer, used to buffer and trace LLM responses to a file
@@ -43,6 +39,10 @@ export class KaiWorkflowManager {
   private buffer: AIMessageChunk = this.defaultBuffer;
   private traceDir: string;
   private tasksInteractionResolver: TasksInteractionResolver | undefined;
+
+  // track inflight message handlers for cleanup
+  private readonly inflightMsgHandlers = new Set<Promise<void>>();
+  private closing = false;
 
   constructor(
     private readonly logger: Logger,
@@ -108,9 +108,14 @@ export class KaiWorkflowManager {
     }
   }
 
-  cleanup(): void {
+  async cleanup(): Promise<void> {
+    if (this.inflightMsgHandlers.size > 0) {
+      this.logger.silly("Waiting for inflight message handlers to complete", {
+        inflightMsgHandlers: this.inflightMsgHandlers.size,
+      });
+      await Promise.all([...this.inflightMsgHandlers]);
+    }
     this.workflow.removeAllListeners();
-    this.pendingInteractions.clear();
     this.logger.info("Kai workflow manager cleaned up", {
       traceDir: this.traceDir,
     });
@@ -119,8 +124,16 @@ export class KaiWorkflowManager {
   private setupEventHandlers(): void {
     this.workflow.removeAllListeners();
 
-    this.workflow.on("workflowMessage", (message: KaiWorkflowMessage) => {
-      this.handleWorkflowMessage(message);
+    this.workflow.on("workflowMessage", async (message: KaiWorkflowMessage) => {
+      const promise = this.handleWorkflowMessage(message);
+      try {
+        this.inflightMsgHandlers.add(promise);
+        await promise;
+      } catch (error) {
+        this.logger.error("Failed to handle workflow message", { error });
+      } finally {
+        this.inflightMsgHandlers.delete(promise);
+      }
     });
   }
 

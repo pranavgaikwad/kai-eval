@@ -8,54 +8,6 @@
 1. Replace JBoss JSF 2.1 implementation with Quarkus MyFaces extension, update JSF managed bean scope annotations from `javax.faces.bean.RequestScoped` to CDI `jakarta.enterprise.context.RequestScoped`, and update JSF view namespace declarations for modern JSF compatibility
 2. Replace JavaEE/JakartaEE JMS elements with Quarkus SmallRye Reactive Messaging equivalents. Remove traditional JMS producer/consumer patterns and replace with reactive messaging channels using MicroProfile Reactive Messaging annotations
 
-## Affected Surface Area
-
-### Components/Modules Touched
-- **Presentation Layer**: JSF managed beans (2 classes), JSF views (6 XHTML files), JSF configuration
-- **Message Producer**: InvoiceManagerEJB - JMS message publishing for invoice notifications
-- **Message Consumer**: HelloWorldMDB - Asynchronous message processing
-- **Business Layer**: CustomerManagerEJB, LogMessageManagerEJB - JMS exception handling in method signatures
-- **Build System**: Maven dependencies and configuration
-- **Configuration**: HornetQ JMS queue configuration, JSF configuration
-- **Transaction Integration**: JMS operations within CMT transaction boundaries
-
-### Entry Points
-- JSF web interface (CustomerManager, LogMessageManager controllers)
-- EJB business logic (CustomerManagerEJB, InvoiceManagerEJB, LogMessageManagerEJB)
-- Message-driven bean (HelloWorldMDB)
-- Web application serving JSF pages at `/jboss-cmt/*`
-
-### Public APIs
-- JSF managed bean methods: `getCustomers()`, `addCustomer(String)`
-- EJB business methods: `createCustomer()`, `createInvoice()`, `logCreateCustomer()`
-- JSF managed bean interfaces accessible via Expression Language
-
-### Map of Direct vs. Indirect Occurrences
-
-**Direct JSF Usage:**
-- Maven dependency: `pom.xml:61-66`
-- Java imports: `CustomerManager.java:22`, `LogMessageManager.java:21`
-- XHTML namespace declarations: 6 view files
-- Configuration: `faces-config.xml`
-
-**Indirect JSF Usage:**
-- JSF Expression Language bindings in XHTML: `#{customerManager.addCustomer(name)}`
-- Navigation outcomes referenced in `faces-config.xml:21-41`
-- URL mappings in `index.html:21`
-
-**Direct JMS Usage:**
-- Maven dependency: `pom.xml:75-80`
-- JMS imports: 4 Java classes with `javax.jms.*` imports
-- JMS resource injection: `InvoiceManagerEJB.java:34-38`
-- JMS API calls: `InvoiceManagerEJB.java:41-49`
-- MDB configuration: `HelloWorldMDB.java:36-39`
-- Queue configuration: `hornetq-jms.xml:21-23`
-
-**Indirect JMS Usage:**
-- Exception handling: JMSException in method signatures (`CustomerManagerEJB.java:52`, `LogMessageManagerEJB.java:43`)
-- Transaction flow: JMS message sending within CMT boundaries
-- Queue JNDI lookups: `java:/queue/CMTQueue` (`InvoiceManagerEJB.java:37`)
-
 ## Per-File Change Plan
 
 ### pom.xml
@@ -67,11 +19,6 @@
 - Add Quarkus MyFaces extension dependency
 - Add Quarkus SmallRye Reactive Messaging extensions
 - Update Maven compiler plugin for Quarkus compatibility if needed
-
-**Citations**:
-- Before: `pom.xml:61-66` (JSF dependency)
-- Before: `pom.xml:75-80` (JMS dependency)
-- After: New dependency blocks to be added
 
 **Current JSF Dependency (pom.xml:61-66)**:
 ```xml
@@ -122,10 +69,6 @@
 - Add import: `jakarta.enterprise.context.RequestScoped`
 - Keep existing `@Named` and `@RequestScoped` annotations (functionality unchanged)
 
-**Citations**:
-- Before: `CustomerManager.java:22` - `import javax.faces.bean.RequestScoped;`
-- Before: `CustomerManager.java:36` - `@RequestScoped`
-- After: Replace import, keep annotation usage
 
 **Current Import (CustomerManager.java:22)**:
 ```java
@@ -147,10 +90,6 @@ import jakarta.enterprise.context.RequestScoped;
 - Add import: `jakarta.enterprise.context.RequestScoped`
 - Keep existing `@Named` and `@RequestScoped` annotations (functionality unchanged)
 
-**Citations**:
-- Before: `LogMessageManager.java:21` - `import javax.faces.bean.RequestScoped;`
-- Before: `LogMessageManager.java:35` - `@RequestScoped`
-- After: Replace import, keep annotation usage
 
 **Current Import (LogMessageManager.java:21)**:
 ```java
@@ -173,12 +112,6 @@ import jakarta.enterprise.context.RequestScoped;
 - Replace JMS message production with reactive messaging emitter
 - Add reactive messaging imports and annotations
 - Update method signature to remove JMSException
-
-**Citations**:
-- Before: `InvoiceManagerEJB.java:23-29` - JMS imports
-- Before: `InvoiceManagerEJB.java:34-38` - JMS resource injection
-- Before: `InvoiceManagerEJB.java:41-49` - JMS message production logic
-- After: Complete class transformation
 
 **Current JMS Imports (InvoiceManagerEJB.java:23-29)**:
 ```java
@@ -210,7 +143,7 @@ private Queue queue;
 **Replacement Resource**:
 ```java
 @Inject
-@Channel("invoice-messages")
+@Channel("<name_of_the_channel>")
 Emitter<String> invoiceEmitter;
 ```
 
@@ -250,14 +183,6 @@ public void createInvoice(String name) {
 - Add reactive messaging imports and annotations
 - Update message processing logic
 
-**Citations**:
-- Before: `HelloWorldMDB.java:21-22` - MDB imports
-- Before: `HelloWorldMDB.java:23-26` - JMS imports
-- Before: `HelloWorldMDB.java:36-39` - MDB configuration
-- Before: `HelloWorldMDB.java:40` - MessageListener interface
-- Before: `HelloWorldMDB.java:47-58` - Message processing logic
-- After: Complete class transformation
-
 **Current MDB Configuration (HelloWorldMDB.java:36-39)**:
 ```java
 @MessageDriven(name = "HelloWorldMDB", activationConfig = {
@@ -295,7 +220,7 @@ public void onMessage(Message rcvMessage) {
 
 **Replacement Processing**:
 ```java
-@Incoming("invoice-messages")
+@Incoming("<name_of_the_channel>")
 public void processInvoiceMessage(String message) {
     LOGGER.info("Received Message: " + message);
 }
@@ -309,11 +234,6 @@ public void processInvoiceMessage(String message) {
 **Exact Changes**:
 - Remove JMSException import (line 27)
 - Remove JMSException from createCustomer method signature (line 52)
-
-**Citations**:
-- Before: `CustomerManagerEJB.java:27` - JMSException import
-- Before: `CustomerManagerEJB.java:52` - Method signature with JMSException
-- After: Updated import and method signature
 
 **Current Import (CustomerManagerEJB.java:27)**:
 ```java

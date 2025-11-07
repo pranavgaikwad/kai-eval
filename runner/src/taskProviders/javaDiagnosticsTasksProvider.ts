@@ -191,6 +191,8 @@ export class JavaDiagnosticsTasksProvider
     this.initialized = false;
   }
 
+  async reset(): Promise<void> {}
+
   async onFileChange(event: FileChangeEvent): Promise<void> {
     this.debouncer.addEvent(event);
   }

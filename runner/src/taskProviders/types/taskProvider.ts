@@ -27,4 +27,5 @@ export interface TaskProvider<
   isInitialized(): boolean;
   getCurrentTasks(): Promise<VersionedTasks>;
   stop(): Promise<void>;
+  reset(): void;
 }

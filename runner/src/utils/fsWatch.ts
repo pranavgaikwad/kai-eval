@@ -5,6 +5,14 @@ export interface FileWatchCapable {
   onFileChange?: (event: FileChangeEvent) => Promise<void>;
 }
 
+export function isFileWatchCapable(obj: unknown): obj is FileWatchCapable {
+  return (
+    typeof obj === "object" &&
+    obj !== null &&
+    typeof (obj as FileWatchCapable).onFileChange === "function"
+  );
+}
+
 export interface FileChangeEvent {
   path: string;
   type: "created" | "modified" | "deleted";

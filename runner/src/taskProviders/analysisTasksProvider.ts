@@ -127,15 +127,7 @@ export class AnalysisTasksProvider
     this.initParams = params;
     await this.startAnalyzerServer();
     // trigger an initial analysis
-    this.debouncer.addEvent({
-      kind: "triggerAnalysis",
-      data: {
-        includedPaths: [],
-        excludedPaths: [],
-        resetCache: true,
-        timestamp: new Date(),
-      } as TriggerAnalysisEvent,
-    });
+    this.runFullAnalysis();
     this.analysisReportDir = path.join(this.initParams.logDir, "analyses");
     await fsPromises.mkdir(this.analysisReportDir, { recursive: true });
   }
@@ -154,6 +146,11 @@ export class AnalysisTasksProvider
 
     this.isServerRunning = false;
     this.logger.info("Analysis provider stopped");
+  }
+
+  async reset(): Promise<void> {
+    this.analysisTasksManager.clearAllData();
+    this.runFullAnalysis();
   }
 
   private async validateInitParams(params: AnalyzerInitParams): Promise<void> {
@@ -390,11 +387,27 @@ export class AnalysisTasksProvider
   }
 
   private async notifyFileChanges(events: FileChangeEvent[]): Promise<void> {
-    const changes = events.map((event) => ({
-      path: event.path,
-      content: "",
-      saved: true,
-    }));
+    const changes = await Promise.all(
+      events
+        .filter((event) => event.type !== "deleted")
+        .map(async (event) => {
+          let content = "";
+          try {
+            content = await fsPromises.readFile(event.path, "utf-8");
+          } catch (error) {
+            this.logger.warn("Failed to read file", {
+              error,
+              path: event.path,
+            });
+            content = "";
+          }
+          return {
+            path: event.path,
+            content,
+            saved: true,
+          };
+        }),
+    );
 
     try {
       await this.connectionManager.sendRequest(NotifyFileChangesRequest, {
@@ -432,7 +445,6 @@ export class AnalysisTasksProvider
         AnalyzeRequest,
         analysisParams,
       );
-      this.logger.info("Analysis completed");
 
       const incidentsByUri = new Map<string, AnalysisIncident[]>();
       for (const ruleSet of result.Rulesets) {
@@ -575,5 +587,17 @@ export class AnalysisTasksProvider
       }
     });
     return Array.from(eventMap.values());
+  }
+
+  public runFullAnalysis() {
+    this.debouncer.addEvent({
+      kind: "triggerAnalysis",
+      data: {
+        includedPaths: [],
+        excludedPaths: [],
+        resetCache: true,
+        timestamp: new Date(),
+      } as TriggerAnalysisEvent,
+    });
   }
 }

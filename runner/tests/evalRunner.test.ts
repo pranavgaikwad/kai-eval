@@ -1,23 +1,17 @@
 import { promises as fs } from "fs";
 import * as path from "path";
-import { execSync } from "child_process";
 
 import { Logger } from "winston";
 
-import { setupKaiEval, KaiEvalSetupResult } from "../src/setup";
+import { setupKaiEval } from "../src/setup";
 import { createOrderedLogger } from "../src/utils/logger";
 import { getConfig } from "../src/utils/config";
-import {
-  type TestCase,
-  type TestApplication,
-  type EvaluationRunOptions,
-} from "../src/eval/types";
+import { type TestCase, type TestApplication } from "../src/eval/types";
 
 describe("Evaluation Runner Integration Tests", () => {
   let logger: Logger;
-  let coolstoreProjectPath: string;
   let testDataPath: string;
-  let evalSetup: KaiEvalSetupResult;
+  let evalSetup: Awaited<ReturnType<typeof setupKaiEval>>;
 
   beforeEach(async () => {
     let setupError: Error | null = null;
@@ -76,7 +70,6 @@ describe("Evaluation Runner Integration Tests", () => {
           logLevel: config.logLevel || { console: "info", file: "debug" },
           logDir,
         },
-        storeSnapshots: true,
         artifactsPath,
       });
 
@@ -205,7 +198,7 @@ describe("Evaluation Runner Integration Tests", () => {
         completenessScore: experimentResult.completeness.score,
         functionalParityScore: experimentResult.functionalParity.score,
         residualEffortScore: experimentResult.residualEffort.score,
-        diffLength: experimentResult.diff.length,
+        diff: experimentResult.diff,
       });
     });
 

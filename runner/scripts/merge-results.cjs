@@ -3,7 +3,7 @@
 /**
  * Script to merge multiple Kai evaluation JSON result files
  *
- * Usage: node merge-results.cjs <directory_path>
+ * Usage: node merge-results.cjs <directory_path> [--output-dir <output_directory>]
  *
  * Merges all results.json files found recursively in the given directory
  * according to the following rules:
@@ -12,6 +12,8 @@
  * 3. results should be merged where experiments of two test cases by the same name
  *    and for the same app are merged and for the same variant/model any of the
  *    two experiment results are retained
+ *
+ * Generates both merged JSON and HTML reports in the output directory
  */
 
 const fs = require("fs");
@@ -60,14 +62,12 @@ function mergeResults(jsonFiles) {
   const allData = [];
   let latestTimestamp = "";
 
-  // Load all JSON files
   for (const filePath of jsonFiles) {
     console.log(`Loading: ${filePath}`);
     const data = loadJsonFile(filePath);
     if (data) {
       allData.push(data);
 
-      // Track latest timestamp
       if (data.timestamp && data.timestamp > latestTimestamp) {
         latestTimestamp = data.timestamp;
       }
@@ -81,7 +81,6 @@ function mergeResults(jsonFiles) {
 
   console.log(`Loaded ${allData.length} JSON files`);
 
-  // Merge results by test case key
   const mergedResultsMap = new Map();
 
   for (const data of allData) {
@@ -94,7 +93,6 @@ function mergeResults(jsonFiles) {
       const testCaseKey = getTestCaseKey(result.testCase);
 
       if (!mergedResultsMap.has(testCaseKey)) {
-        // First time seeing this test case, initialize with a copy
         mergedResultsMap.set(testCaseKey, {
           testCase: { ...result.testCase },
           experiments: [],
@@ -104,25 +102,20 @@ function mergeResults(jsonFiles) {
 
       const mergedResult = mergedResultsMap.get(testCaseKey);
 
-      // Merge experiments by variant:model key
       const experimentMap = new Map();
 
-      // Add existing experiments to map
       for (const exp of mergedResult.experiments) {
         const expKey = getExperimentKey(exp);
         experimentMap.set(expKey, exp);
       }
 
-      // Add new experiments (will overwrite duplicates)
       for (const exp of result.experiments || []) {
         const expKey = getExperimentKey(exp);
         experimentMap.set(expKey, { ...exp });
       }
 
-      // Update the experiments array
       mergedResult.experiments = Array.from(experimentMap.values());
 
-      // Merge errors (avoid duplicates)
       const errorSet = new Set(mergedResult.errors);
       for (const error of result.errors || []) {
         errorSet.add(error);
@@ -131,10 +124,8 @@ function mergeResults(jsonFiles) {
     }
   }
 
-  // Convert map back to array
   const mergedResults = Array.from(mergedResultsMap.values());
 
-  // Calculate summary
   const totalTestCases = mergedResults.length;
   const totalExperiments = mergedResults.reduce(
     (sum, result) => sum + result.experiments.length,
@@ -164,20 +155,46 @@ function mergeResults(jsonFiles) {
   return mergedData;
 }
 
-function main() {
+function parseArguments() {
   const args = process.argv.slice(2);
+  const options = {
+    directoryPath: null,
+    outputDir: process.cwd(), // Default to current directory
+  };
 
-  if (args.length !== 1) {
-    console.error("Usage: node merge-results.cjs <directory_path>");
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+
+    if (arg === "--output-dir") {
+      if (i + 1 >= args.length) {
+        console.error("Error: --output-dir requires a value");
+        process.exit(1);
+      }
+      options.outputDir = args[i + 1];
+      i++; // Skip the next argument as it's the value for --output-dir
+    } else if (!options.directoryPath) {
+      options.directoryPath = arg;
+    } else {
+      console.error(`Error: Unexpected argument '${arg}'`);
+      process.exit(1);
+    }
+  }
+
+  if (!options.directoryPath) {
+    console.error("Usage: node merge-results.cjs <directory_path> [--output-dir <output_directory>]");
     console.error("");
     console.error(
       "This script finds all results.json files recursively in the given directory",
     );
-    console.error("and merges them into a single JSON file");
+    console.error("and merges them into JSON and HTML reports in the output directory");
     process.exit(1);
   }
 
-  const directoryPath = args[0];
+  return options;
+}
+
+async function main() {
+  const { directoryPath, outputDir } = parseArguments();
 
   if (!fs.existsSync(directoryPath)) {
     console.error(`Error: Directory '${directoryPath}' does not exist`);
@@ -187,6 +204,11 @@ function main() {
   if (!fs.statSync(directoryPath).isDirectory()) {
     console.error(`Error: '${directoryPath}' is not a directory`);
     process.exit(1);
+  }
+
+  if (!fs.existsSync(outputDir)) {
+    console.log(`Creating output directory: ${outputDir}`);
+    fs.mkdirSync(outputDir, { recursive: true });
   }
 
   console.log(`Searching for results.json files in: ${directoryPath}`);
@@ -209,15 +231,20 @@ function main() {
     process.exit(1);
   }
 
-  // Write merged results to stdout
-  console.log("\n--- MERGED RESULTS ---");
-  console.log(
-    fs.writeFileSync(
-      "merged-results.json",
-      JSON.stringify(mergedData, null, 2),
-    ),
-  );
-  console.log(`Merged results written to: merged-results.json`);
+  // Generate output file paths
+  const jsonOutputPath = path.join(outputDir, "merged-results.json");
+  const htmlOutputPath = path.join(outputDir, "merged-report.html");
+
+  // Write merged JSON results
+  console.log("\n--- GENERATING REPORTS ---");
+  fs.writeFileSync(jsonOutputPath, JSON.stringify(mergedData, null, 2));
+  console.log(`✅ Merged JSON results written to: ${jsonOutputPath}`);
+
+  console.log("\n--- SUMMARY ---");
+  console.log(`📂 Output directory: ${outputDir}`);
+  console.log(`📄 JSON report: ${path.basename(jsonOutputPath)}`);
+  console.log(`🌐 HTML report: ${path.basename(htmlOutputPath)}`);
+
   process.exit(0);
 }
 

@@ -2,27 +2,36 @@ import * as os from "os";
 import * as path from "path";
 
 import { type EnhancedIncident } from "@editor-extensions/shared";
+import { type Logger } from "winston";
 
 import { setupKaiWorkflow } from "./kaiWorkflow";
 import { setupProviders } from "./providers";
-import {
-  type KaiWorkflowSetupConfig,
-  type TaskProviderSetupConfig,
-  type KaiRunnerSetupResult,
-  type RunKaiWorkflowInput,
-} from "./types";
+import { type RunKaiWorkflowInput } from "./types";
 import { type KaiWorkflowManager, type TasksInteractionResolver } from "../kai";
 import { TaskManager } from "../taskManager";
 import { AnalysisTask } from "../taskProviders";
 import type { KaiRunnerConfig } from "../types";
 import { createOrderedLogger } from "../utils/logger";
 
-export async function setupKaiRunner(
-  config: KaiRunnerConfig,
-  env: Record<string, string> = process.env as Record<string, string>,
-  storeSnapshots: boolean = false,
-  filterTasksFunc?: TasksInteractionResolver,
-): Promise<KaiRunnerSetupResult> {
+interface KaiRunnerSetupOptions {
+  config: KaiRunnerConfig;
+  env: Record<string, string>;
+  programmingLanguage: string;
+  tasksInteractionResolver?: TasksInteractionResolver;
+  logger?: Logger;
+}
+
+/**
+ * This sets up everything needed to run Kai and generate fixes - kai workflow, task manager.
+ * @param opts - kai runner setup options
+ * @returns shutdownFunc for graceful cleanup and runFunc to trigger kai workflow with input
+ */
+export async function setupKaiRunner(opts: KaiRunnerSetupOptions): Promise<{
+  shutdownFunc: () => Promise<void>;
+  runFunc: (inp: RunKaiWorkflowInput) => Promise<void>;
+}> {
+  const { config, env, programmingLanguage, tasksInteractionResolver } = opts;
+
   // Validate required configuration
   if (!config.workspacePaths || config.workspacePaths.length === 0) {
     throw new Error("workspacePaths must be provided in config");
@@ -37,64 +46,35 @@ export async function setupKaiRunner(
 
   const logDir =
     config.logDir || path.join(os.tmpdir(), `kai-runner-logs-${Date.now()}`);
+  config.logDir = logDir;
+  const logLevels = config.logLevel || { console: "info", file: "debug" };
+  config.logLevel = logLevels;
 
-  const defaultLogLevels = { console: "info", file: "debug" };
-  const logLevels = config.logLevel || defaultLogLevels;
-
-  const logger = createOrderedLogger(
-    logLevels.console,
-    logLevels.file,
-    path.join(logDir, "kai-runner.log"),
-  );
+  const logger =
+    opts.logger ||
+    createOrderedLogger(
+      logLevels.console,
+      logLevels.file,
+      path.join(logDir, "kai-runner.log"),
+    );
 
   logger.info("Starting Kai runner", { config });
 
-  // Step 1: Setup task providers
   logger.info("Setting up task providers");
-  const providerConfig: TaskProviderSetupConfig = {
-    workspacePaths: config.workspacePaths,
+  const providersSetup = await setupProviders({
+    config,
+    programmingLanguage,
     logger,
-    ...(config.jdtlsBinaryPath && {
-      diagnosticsParams: {
-        jdtlsBinaryPath: config.jdtlsBinaryPath,
-        jdtlsBundles: config.jdtlsBundles || [],
-        jvmMaxMem: config.jvmMaxMem,
-        logDir,
-      },
-    }),
-    ...(config.kaiAnalyzerRpcPath && {
-      analysisParams: {
-        analyzerBinaryPath: config.kaiAnalyzerRpcPath,
-        rulesPaths: config.rulesPaths || [],
-        targets: config.targets || [],
-        sources: config.sources || [],
-        logDir,
-      },
-    }),
-  };
-
-  const providersSetup = await setupProviders(providerConfig);
-
-  if (
-    !providersSetup.providers.analysis ||
-    !providersSetup.providers.diagnostics
-  ) {
+  });
+  if (!providersSetup || !providersSetup.providers.length) {
     throw new Error("Failed to initialize providers");
   }
 
-  // Step 2: Setup task manager
   logger.info("Setting up task manager");
-  const taskManager = new TaskManager(
-    logger,
-    [providersSetup.providers.analysis, providersSetup.providers.diagnostics],
-    logDir,
-    storeSnapshots,
-  );
+  const taskManager = new TaskManager(logger, providersSetup.providers);
 
-  // Step 3: Setup Kai workflow manager
   logger.info("Setting up Kai workflow manager");
-
-  const kaiConfig: KaiWorkflowSetupConfig = {
+  const kaiSetup = await setupKaiWorkflow({
     workspaceDir,
     logger,
     taskManager,
@@ -105,18 +85,16 @@ export async function setupKaiRunner(
     env,
     solutionServerUrl: config.solutionServerUrl,
     logDir,
-    tasksUserInteractionFunction: filterTasksFunc,
-  };
-
-  const kaiSetup = await setupKaiWorkflow(kaiConfig);
+    tasksInteractionResolver: tasksInteractionResolver,
+  });
   logger.info("Kai runner setup complete");
 
   // Create shutdown function
-  const shutdown = async () => {
+  const shutdownFunc = async () => {
     logger.info("Shutting down Kai runner");
     try {
       await kaiSetup.shutdown();
-      await providersSetup.shutdown();
+      await providersSetup.shutdownFunc();
       logger.info("Kai runner shutdown complete");
     } catch (error) {
       logger.error("Error during shutdown", { error });
@@ -130,11 +108,7 @@ export async function setupKaiRunner(
   );
 
   return {
-    logger,
-    providersSetup,
-    kaiSetup,
-    taskManager,
-    shutdown,
+    shutdownFunc,
     runFunc,
   };
 }

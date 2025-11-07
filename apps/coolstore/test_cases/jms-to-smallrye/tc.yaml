@@ -1,0 +1,18 @@
+---
+app: coolstore
+name: jms-to-smallrye
+description: |
+  JMS is not supported in Quarkus.
+  References to JavaEE/JakartaEE JMS elements should be removed and replaced with their Quarkus SmallRye/Microprofile equivalents.
+
+  This issue was found in the following files:
+  - src/main/java/com/redhat/coolstore/service/InventoryNotificationMDB.java
+  - src/main/java/com/redhat/coolstore/service/OrderServiceMDB.java
+  - src/main/java/com/redhat/coolstore/service/ShoppingCartOrderProcessor.java
+rules:
+  - ruleset: quarkus/springboot
+    rule: jms-to-reactive-quarkus-00050
+testSelectors:
+  - JMSComponentIntegrationTest
+  - JMSMigrationE2ETest
+migrationHint: Java EE to Quarkus

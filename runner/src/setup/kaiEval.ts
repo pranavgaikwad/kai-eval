@@ -1,42 +1,39 @@
 import * as os from "os";
 import * as path from "path";
 
-import {
-  type GetTaskManagerFunction,
-  type KaiRunnerFunction,
-} from "src/eval/types";
 import { type Logger } from "winston";
 
 import { type TasksInteractionResolver, type FilteredTask } from "../kai";
 import { type KaiRunnerConfig } from "../types";
-import { setupKaiRunner, getKaiWorkflowStarterFunction } from "./kaiRunner";
+import { getKaiWorkflowStarterFunction } from "./kaiRunner";
 import { setupKaiWorkflow } from "./kaiWorkflow";
-import { setupProviders } from "./providers";
 import {
-  type RunKaiWorkflowInput,
-  type KaiEvalSetupConfig,
-  type KaiEvalSetupResult,
-} from "./types";
-import { OptimizedEvaluationRunner } from "../eval/optimizedRunner";
-import {
+  DefaultEvaluationRunner,
   type TestCase,
   type TestApplication,
   type TestCaseVariant,
-} from "../eval/types";
-import { TaskManager } from "../taskManager";
+  type EvaluationRunner,
+  type KaiRunnerFunction,
+} from "../eval";
+import { type TaskManager } from "../taskManager";
 import { AnalysisTask, type Task } from "../taskProviders";
 import { createOrderedLogger } from "../utils/logger";
+
+interface KaiEvalSetupOptions {
+  readonly config: KaiRunnerConfig;
+  readonly artifactsPath?: string;
+}
 
 /**
  * Sets up a Kai evaluation runner for running migration evaluation workflows
  *
- * @param setupConfig Configuration for the evaluation runner setup
+ * @param opts Configuration for the evaluation runner setup
  * @returns Promise<KaiEvalSetupResult> The configured evaluation runner and metadata
  */
-export async function setupKaiEval(
-  setupConfig: KaiEvalSetupConfig,
-): Promise<KaiEvalSetupResult> {
-  const { config, storeSnapshots = false } = setupConfig;
+export async function setupKaiEval(opts: KaiEvalSetupOptions): Promise<{
+  evaluationRunner: EvaluationRunner;
+}> {
+  const { config } = opts;
 
   if (!config.models || config.models.length === 0) {
     throw new Error("Models must be specified in config for evaluation");
@@ -53,8 +50,9 @@ export async function setupKaiEval(
 
   const logDir =
     config.logDir || path.join(os.tmpdir(), `kai-eval-logs-${Date.now()}`);
-  const defaultLogLevels = { console: "info", file: "debug" };
-  const logLevels = config.logLevel || defaultLogLevels;
+  config.logDir = logDir;
+  const logLevels = config.logLevel || { console: "info", file: "debug" };
+  config.logLevel = logLevels;
 
   const logger = createOrderedLogger(
     logLevels.console,
@@ -65,14 +63,12 @@ export async function setupKaiEval(
   logger.info("Setting up Kai evaluation runner", { config });
 
   const artifactsPath =
-    setupConfig.artifactsPath || path.join(os.tmpdir(), "kai-eval-artifacts");
+    opts.artifactsPath || path.join(os.tmpdir(), "kai-eval-artifacts");
 
-  const { getTaskManager, kaiRunner } =
-    setupLocalKaiRunnerForEvalV2(storeSnapshots);
+  const { kaiRunner } = setupLocalKaiRunnerForEval();
 
-  const evaluationRunner = new OptimizedEvaluationRunner(
+  const evaluationRunner = new DefaultEvaluationRunner(
     config,
-    getTaskManager,
     kaiRunner,
     logger,
     artifactsPath,
@@ -89,106 +85,11 @@ export async function setupKaiEval(
   };
 }
 
-export function setupLocalKaiRunnerForEval(
-  storeSnapshots: boolean = false,
-  agentTasksProviderFunc?: TasksInteractionResolver,
-): {
-  getTaskManagerFunc: GetTaskManagerFunction;
+// Sets up a runner function to run standalone Kai runner.
+// Passed to EvaluationRunner to run Kai for each test case.
+export function setupLocalKaiRunnerForEval(): {
   kaiRunner: KaiRunnerFunction;
 } {
-  let runKaiWorkflowFunc: (inp: RunKaiWorkflowInput) => Promise<void>;
-  const getTaskManagerFunc = async (
-    logger: Logger,
-    config: KaiRunnerConfig,
-  ): Promise<{
-    taskManager: TaskManager;
-    shutdownFunc: () => Promise<void>;
-  }> => {
-    const { taskManager, runFunc, shutdown } = await setupKaiRunner(
-      config,
-      process.env as Record<string, string>,
-      storeSnapshots,
-      agentTasksProviderFunc,
-    );
-    runKaiWorkflowFunc = runFunc;
-    return { taskManager, shutdownFunc: shutdown };
-  };
-
-  const kaiRunner: KaiRunnerFunction = async (
-    _logger: Logger,
-    testCase: TestCase,
-    application: TestApplication,
-    variant: TestCaseVariant,
-    _config: KaiRunnerConfig,
-  ) => {
-    return await runKaiWorkflowFunc({
-      kind: "fixByRules",
-      data: {
-        rules: testCase.rules,
-        migrationHint: testCase.migrationHint,
-        programmingLanguage: application.programmingLanguage,
-        agentMode: variant.agentMode,
-      },
-    });
-  };
-
-  return {
-    getTaskManagerFunc,
-    kaiRunner,
-  };
-}
-
-export function setupLocalKaiRunnerForEvalV2(storeSnapshots: boolean = false): {
-  getTaskManager: GetTaskManagerFunction;
-  kaiRunner: KaiRunnerFunction;
-} {
-  let availableTaskManager: TaskManager;
-  const getTaskManager: GetTaskManagerFunction = async (
-    logger: Logger,
-    config: KaiRunnerConfig,
-  ) => {
-    if (!config.workspacePaths || !config.workspacePaths.length) {
-      throw new Error("workspacePaths must be provided in config");
-    }
-    const logDir =
-      config.logDir || path.join(os.tmpdir(), `kai-runner-logs-${Date.now()}`);
-    const providersSetup = await setupProviders({
-      workspacePaths: config.workspacePaths,
-      logger,
-      ...(config.jdtlsBinaryPath && {
-        diagnosticsParams: {
-          jdtlsBinaryPath: config.jdtlsBinaryPath,
-          jdtlsBundles: config.jdtlsBundles || [],
-          jvmMaxMem: config.jvmMaxMem,
-          logDir,
-        },
-      }),
-      ...(config.kaiAnalyzerRpcPath && {
-        analysisParams: {
-          analyzerBinaryPath: config.kaiAnalyzerRpcPath,
-          rulesPaths: config.rulesPaths || [],
-          targets: config.targets || [],
-          sources: config.sources || [],
-          logDir,
-        },
-      }),
-    });
-    const taskManager = new TaskManager(
-      logger,
-      [
-        providersSetup.providers.analysis!,
-        providersSetup.providers.diagnostics!,
-      ],
-      logDir,
-      storeSnapshots,
-    );
-    const shutdownFunc = async () => {
-      await providersSetup.shutdown();
-    };
-    availableTaskManager = taskManager;
-    return { taskManager, shutdownFunc };
-  };
-
   const getTasksInteractionFunction = (
     logger: Logger,
     tc: TestCase,
@@ -254,6 +155,7 @@ export function setupLocalKaiRunnerForEvalV2(storeSnapshots: boolean = false): {
     application: TestApplication,
     variant: TestCaseVariant,
     config: KaiRunnerConfig,
+    taskManager: TaskManager,
   ) => {
     if (!config.workspacePaths || !config.workspacePaths.length) {
       throw new Error("workspacePaths must be provided in config");
@@ -261,7 +163,7 @@ export function setupLocalKaiRunnerForEvalV2(storeSnapshots: boolean = false): {
     if (!config.models || !config.models.length) {
       throw new Error("models must be provided in config");
     }
-    if (!availableTaskManager) {
+    if (!taskManager) {
       throw new Error("Task manager uninitialized");
     }
     const seenTasks = new Map<string, number>();
@@ -271,9 +173,9 @@ export function setupLocalKaiRunnerForEvalV2(storeSnapshots: boolean = false): {
     const { kaiWorkflowManager } = await setupKaiWorkflow({
       workspaceDir,
       logger,
-      taskManager: availableTaskManager,
+      taskManager,
       logDir,
-      tasksUserInteractionFunction: getTasksInteractionFunction(
+      tasksInteractionResolver: getTasksInteractionFunction(
         logger,
         tc,
         workspaceDir,
@@ -285,7 +187,7 @@ export function setupLocalKaiRunnerForEvalV2(storeSnapshots: boolean = false): {
       },
     });
     const runFunc = getKaiWorkflowStarterFunction(
-      availableTaskManager,
+      taskManager,
       kaiWorkflowManager,
     );
     const timeoutMs = tc.timeoutMs;
@@ -328,7 +230,6 @@ export function setupLocalKaiRunnerForEvalV2(storeSnapshots: boolean = false): {
   };
 
   return {
-    getTaskManager,
     kaiRunner,
   };
 }

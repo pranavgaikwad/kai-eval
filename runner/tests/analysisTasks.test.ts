@@ -4,7 +4,7 @@ import { execSync } from "child_process";
 
 import { Logger } from "winston";
 
-import { setupProviders, TaskProviderSetupConfig } from "../src/setup";
+import { setupProviders } from "../src";
 import { createOrderedLogger } from "../src/utils/logger";
 import { getConfig } from "../src/utils/config";
 
@@ -56,37 +56,17 @@ describe("AnalysisTasksProvider Integration Tests", () => {
     const pomPath = path.join(coolstoreProjectPath, "pom.xml");
     await fs.access(pomPath);
 
-    const providerConfig: TaskProviderSetupConfig = {
-      workspacePaths: [coolstoreProjectPath],
+    providersSetup = await setupProviders({
+      config: {
+        ...config,
+        workspacePaths: [coolstoreProjectPath],
+        logDir,
+        targets: ["quarkus", "cloud-readiness", "jakarta-ee"],
+        sources: [],
+      },
+      programmingLanguage: "java",
       logger,
-      ...(config.jdtlsBinaryPath && {
-        diagnosticsParams: {
-          jdtlsBinaryPath: config.jdtlsBinaryPath,
-          jdtlsBundles: config.jdtlsBundles || [],
-          jvmMaxMem: config.jvmMaxMem,
-          logDir,
-        },
-      }),
-      ...(config.kaiAnalyzerRpcPath && {
-        analysisParams: {
-          analyzerBinaryPath: config.kaiAnalyzerRpcPath,
-          rulesPaths: config.rulesPaths || [],
-          targets: ["quarkus", "jakarta-ee", "cloud-readiness"],
-          sources: [],
-          logDir,
-        },
-      }),
-    };
-
-    if (!config.jdtlsBinaryPath) {
-      throw new Error("JDTLS binary path not configured in .config.json");
-    }
-
-    if (!config.kaiAnalyzerRpcPath) {
-      throw new Error("Kai analyzer RPC path not configured in .config.json");
-    }
-
-    providersSetup = await setupProviders(providerConfig);
+    });
     logger.info("Providers setup completed", {
       providerCount: Object.keys(providersSetup.providers).length,
     });
@@ -95,7 +75,7 @@ describe("AnalysisTasksProvider Integration Tests", () => {
   afterAll(async () => {
     if (providersSetup) {
       try {
-        await providersSetup.shutdown();
+        await providersSetup.shutdownFunc();
         logger.info("Providers shutdown completed");
       } catch (error) {
         logger.error("Error during providers shutdown", { error });
@@ -126,7 +106,9 @@ describe("AnalysisTasksProvider Integration Tests", () => {
     logger.info("Both providers initialized successfully");
 
     // test whether initial analysis is triggered
-    const analysisProvider = providersSetup.providers.analysis;
+    const analysisProvider = providersSetup.providers.find(
+      (p) => p.name === "analysis",
+    );
     if (!analysisProvider || !analysisProvider.isInitialized()) {
       throw new Error("Analysis provider not initialized");
     }

@@ -3,30 +3,48 @@ import {
   InMemoryCacheWithRevisions,
   FileBasedResponseCache,
 } from "@editor-extensions/agentic";
+import { type Logger } from "winston";
 
-import {
-  type KaiWorkflowSetupConfig,
-  type KaiWorkflowSetupResult,
-} from "./types";
 import {
   KaiWorkflowManager,
   type KaiWorkflowManagerOptions,
+  type SupportedModelProviders,
+  type TasksInteractionResolver,
   createModelProvider,
 } from "../kai";
+import { type TaskManager } from "../taskManager";
 
-export async function setupKaiWorkflow(
-  config: KaiWorkflowSetupConfig,
-): Promise<KaiWorkflowSetupResult> {
-  const logger = config.logger.child({ module: "KaiSetup" });
+interface KaiWorkflowSetupOptions {
+  workspaceDir: string;
+  logger: Logger;
+  taskManager: TaskManager;
+  modelConfig?: {
+    provider: SupportedModelProviders;
+    args: Record<string, unknown>;
+  };
+  env?: Record<string, string>;
+  solutionServerUrl?: string;
+  logDir: string;
+  /*
+   * a function that sends tasks to the kai workflow when it requests diagnostics
+   */
+  tasksInteractionResolver?: TasksInteractionResolver;
+}
+
+export async function setupKaiWorkflow(opts: KaiWorkflowSetupOptions): Promise<{
+  kaiWorkflowManager: KaiWorkflowManager;
+  shutdown: () => Promise<void>;
+}> {
+  const logger = opts.logger.child({ module: "KaiSetup" });
   logger.info("Setting up Kai workflow system");
 
-  const env = config.env || (process.env as Record<string, string>);
+  const env = opts.env || (process.env as Record<string, string>);
 
   try {
-    if (!config.modelConfig) {
+    if (!opts.modelConfig) {
       throw new Error("Model configuration is required");
     }
-    const modelConfig = config.modelConfig;
+    const modelConfig = opts.modelConfig;
 
     logger.silly("Creating model provider", {
       provider: modelConfig.provider,
@@ -50,7 +68,7 @@ export async function setupKaiWorkflow(
           realm: "",
           insecure: false,
         },
-        url: config.solutionServerUrl || "",
+        url: opts.solutionServerUrl || "",
       },
       logger,
     );
@@ -69,18 +87,18 @@ export async function setupKaiWorkflow(
 
     const kaiWorkflowManager = new KaiWorkflowManager(
       logger,
-      config.taskManager,
-      config.logDir,
+      opts.taskManager,
+      opts.logDir,
     );
 
     const workflowOptions: KaiWorkflowManagerOptions = {
       logger,
-      workspaceDir: config.workspaceDir,
+      workspaceDir: opts.workspaceDir,
       modelProvider,
       solutionServerClient,
       fsCache,
       toolCache,
-      filterTasksFunc: config.tasksUserInteractionFunction,
+      filterTasksFunc: opts.tasksInteractionResolver,
     };
 
     logger.info("Initializing Kai workflow");

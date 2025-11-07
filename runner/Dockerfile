@@ -50,7 +50,7 @@ COPY scripts/ ./scripts/
 RUN chmod +x ./scripts/*.sh
 COPY src/ ./src/
 COPY tsconfig.json jest.config.js ./
-RUN npm run pre-build && npm install && npm run build
+RUN npm i -g patch-package && npm run pre-build && npm install && npm run build
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal
 ARG NODE_VERSION
