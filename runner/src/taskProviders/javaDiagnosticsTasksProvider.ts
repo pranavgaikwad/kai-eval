@@ -180,6 +180,7 @@ export class JavaDiagnosticsTasksProvider
   }
 
   async stop(): Promise<void> {
+    await this.debouncer.waitUntilIdle(10000);
     await this.debouncer.flush();
     await this.jdtlsConnectionManager.disconnect();
     await this.processManager.terminate();
